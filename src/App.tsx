@@ -89,6 +89,9 @@ const i18n = {
     exporting: "转换中",
     recording: "录制中...",
     exportVideo: "导出视频",
+    webmWarning: "提示：WebM 透明格式将采用【实时录制】方案以防止内存溢出。导出期间请勿切换标签页或最小化浏览器。",
+    recordingWebM: "正在实时录制画面...",
+    muxingAudio: "正在合成音频...",
     play: "播放",
     pause: "暂停",
     time: "时间",
@@ -153,6 +156,9 @@ const i18n = {
     exporting: "Converting",
     recording: "Recording...",
     exportVideo: "Export Video",
+    webmWarning: "Note: WebM format uses real-time recording to prevent memory issues. Please do not switch tabs or minimize the browser during export.",
+    recordingWebM: "Recording real-time...",
+    muxingAudio: "Muxing audio...",
     play: "Play",
     pause: "Pause",
     time: "Time",
@@ -217,6 +223,9 @@ const i18n = {
     exporting: "変換中",
     recording: "録画中...",
     exportVideo: "動画を出力",
+    webmWarning: "注：WebM形式はメモリ不足を防ぐためリアルタイム録画を使用します。エクスポート中はタブを切り替えたり、ブラウザを最小化したりしないでください。",
+    recordingWebM: "リアルタイム録画中...",
+    muxingAudio: "音声を合成中...",
     play: "再生",
     pause: "一時停止",
     time: "時間",
@@ -639,7 +648,150 @@ export default function App() {
     }
   };
 
+  const exportWebMRealtime = async () => {
+    if (!parsedData) return;
+    setIsExporting(true);
+    isExportingRef.current = true;
+    setExportStatus(i18n[language].recordingWebM || 'Recording...');
+    setExportProgress(0);
+    setFfmpegError('');
+
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      setIsExporting(false);
+      isExportingRef.current = false;
+      return;
+    }
+
+    if (isPlaying) togglePlay();
+    setCurrentTime(0);
+    if (audioRef.current) {
+      audioRef.current.currentTime = Math.max(0, audioOffsetRef.current / 1000);
+    }
+
+    const stream = canvas.captureStream(30);
+    let mimeType = 'video/webm;codecs=vp9';
+    if (!MediaRecorder.isTypeSupported(mimeType)) {
+      mimeType = 'video/webm;codecs=vp8';
+    }
+    if (!MediaRecorder.isTypeSupported(mimeType)) {
+      mimeType = 'video/webm';
+    }
+    
+    const recorder = new MediaRecorder(stream, { mimeType });
+    const chunks: BlobPart[] = [];
+
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) chunks.push(e.data);
+    };
+
+    const lastNote = parsedData.notes[parsedData.notes.length - 1];
+    const totalDurationMs = lastNote ? lastNote.startTime + lastNote.duration : 0;
+    const durationToRecord = totalDurationMs + 500;
+
+    recorder.start();
+    
+    setIsPlaying(true);
+    isPlayingRef.current = true;
+    startTimeRef.current = performance.now();
+    if (audioRef.current && audioUrl) {
+      audioRef.current.play().catch(console.error);
+    }
+    if (reqRef.current) cancelAnimationFrame(reqRef.current);
+    reqRef.current = requestAnimationFrame(updateFrame);
+
+    const progressInterval = setInterval(() => {
+      const current = audioRef.current ? audioRef.current.currentTime * 1000 - audioOffsetRef.current : currentTime;
+      setExportProgress(Math.min(100, Math.round((current / durationToRecord) * 100)));
+    }, 500);
+
+    await new Promise<void>((resolve) => {
+      setTimeout(() => {
+        recorder.stop();
+        if (isPlayingRef.current) {
+          setIsPlaying(false);
+          isPlayingRef.current = false;
+          if (audioRef.current) audioRef.current.pause();
+          if (reqRef.current) cancelAnimationFrame(reqRef.current);
+        }
+        clearInterval(progressInterval);
+        setTimeout(resolve, 500);
+      }, durationToRecord);
+    });
+
+    const videoBlob = new Blob(chunks, { type: mimeType });
+
+    try {
+      if (audioFileRef.current) {
+        setExportStatus(i18n[language].muxingAudio || 'Muxing audio...');
+        if (!ffmpegLoaded) {
+          alert(i18n[language].ffmpegNotLoadedAlert);
+          throw new Error("FFmpeg not loaded");
+        }
+        const ffmpeg = ffmpegRef.current;
+        const videoBuffer = await videoBlob.arrayBuffer();
+        await ffmpeg.writeFile('temp_video.webm', new Uint8Array(videoBuffer));
+
+        const audioBuffer = await audioFileRef.current.arrayBuffer();
+        const ext = audioFileRef.current.name.split('.').pop() || 'mp3';
+        await ffmpeg.writeFile(`input_audio.${ext}`, new Uint8Array(audioBuffer));
+
+        const args = [];
+        if (audioOffset > 0) {
+          args.push('-itsoffset', (audioOffset / 1000).toString());
+        }
+        args.push('-i', 'temp_video.webm');
+        
+        if (audioOffset < 0) {
+          args.push('-itsoffset', (Math.abs(audioOffset) / 1000).toString());
+        }
+        args.push('-i', `input_audio.${ext}`);
+
+        args.push('-c:v', 'copy', '-c:a', 'libopus', 'output.webm');
+
+        await ffmpeg.exec(args);
+
+        const fileData = await ffmpeg.readFile('output.webm');
+        const data = new Uint8Array(fileData as ArrayBuffer);
+        const finalBlob = new Blob([data.buffer], { type: 'video/webm' });
+        
+        const url = URL.createObjectURL(finalBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `lipsync_${Date.now()}.webm`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        try { await ffmpeg.deleteFile('temp_video.webm'); } catch(e){}
+        try { await ffmpeg.deleteFile(`input_audio.${ext}`); } catch(e){}
+        try { await ffmpeg.deleteFile('output.webm'); } catch(e){}
+
+      } else {
+        const url = URL.createObjectURL(videoBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `lipsync_${Date.now()}.webm`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      console.error("WebM Export failed:", err);
+      setFfmpegError(t.conversionFailed + String(err));
+    } finally {
+      setIsExporting(false);
+      isExportingRef.current = false;
+      setExportStatus('');
+      setExportProgress(0);
+      const activeNote = parsedData.notes.find(n => currentTime >= n.startTime && currentTime < n.startTime + n.duration);
+      drawCanvas(currentMouth, currentTime, activeNote ? activeNote.cleanedLyric : '');
+    }
+  };
+
   const exportVideoOffline = async () => {
+    if (exportFormat === 'webm') {
+      return exportWebMRealtime();
+    }
+
     if (!parsedData) return;
     if (!ffmpegLoaded) {
       alert(i18n[language].ffmpegNotLoadedAlert);
@@ -658,7 +810,7 @@ export default function App() {
     }
 
     const ffmpeg = ffmpegRef.current;
-    const fps = 24; // 降低帧率到24fps，减少20%的内存占用
+    const fps = 30; // 恢复到30fps
     const lastNote = parsedData.notes[parsedData.notes.length - 1];
     const totalDurationMs = lastNote ? lastNote.startTime + lastNote.duration : 0;
     const totalFrames = Math.ceil((totalDurationMs + 500) / 1000 * fps); // 500ms padding
@@ -1578,6 +1730,12 @@ export default function App() {
                     </button>
                   </div>
                 </div>
+                
+                {exportFormat === 'webm' && (
+                  <div className="text-xs text-amber-600/80 text-center mt-2 bg-amber-50 p-2 rounded-lg">
+                    {t.webmWarning}
+                  </div>
+                )}
                 
                 {ffmpegError && (
                   <div className="text-sm text-amber-500/80 text-center">
