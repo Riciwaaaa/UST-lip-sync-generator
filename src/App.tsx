@@ -658,7 +658,7 @@ export default function App() {
     }
 
     const ffmpeg = ffmpegRef.current;
-    const fps = 30;
+    const fps = 24; // 降低帧率到24fps，减少20%的内存占用
     const lastNote = parsedData.notes[parsedData.notes.length - 1];
     const totalDurationMs = lastNote ? lastNote.startTime + lastNote.duration : 0;
     const totalFrames = Math.ceil((totalDurationMs + 500) / 1000 * fps); // 500ms padding
@@ -670,9 +670,26 @@ export default function App() {
       return;
     }
 
+    // 创建一个离屏 Canvas，限制最大分辨率以防止内存溢出
+    const MAX_EXPORT_DIMENSION = 1280;
+    let exportScale = 1;
+    if (canvas.width > MAX_EXPORT_DIMENSION || canvas.height > MAX_EXPORT_DIMENSION) {
+      exportScale = Math.min(MAX_EXPORT_DIMENSION / canvas.width, MAX_EXPORT_DIMENSION / canvas.height);
+    }
+    const exportWidth = Math.round(canvas.width * exportScale);
+    const exportHeight = Math.round(canvas.height * exportScale);
+    
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = exportWidth;
+    exportCanvas.height = exportHeight;
+    const exportCtx = exportCanvas.getContext('2d');
+
+    let frameExt = '';
+    let hasAudio = false;
+    const outputName = `output.${exportFormat}`;
+
     try {
       // 1. Render frames
-      let frameExt = '';
       const isTransparent = exportFormat === 'webm' || exportFormat === 'gif';
       const mimeType = isTransparent ? 'image/webp' : 'image/jpeg';
       
@@ -697,9 +714,17 @@ export default function App() {
         const mouth = activeNote ? getMouthShape(activeNote.cleanedLyric) : 'default';
         const lyric = activeNote ? activeNote.cleanedLyric : '';
         
+        // 绘制到主画布
         drawCanvas(mouth, timeMs, lyric, !isTransparent);
         
-        const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, mimeType, 0.8));
+        // 缩放并绘制到导出画布
+        if (exportCtx) {
+          exportCtx.drawImage(canvas, 0, 0, exportWidth, exportHeight);
+        }
+        
+        const targetCanvas = exportCtx ? exportCanvas : canvas;
+        const blob = await new Promise<Blob | null>(resolve => targetCanvas.toBlob(resolve, mimeType, 0.7)); // 进一步降低质量到0.7
+        
         if (blob) {
           if (!frameExt) {
             frameExt = blob.type === 'image/webp' ? 'webp' : blob.type === 'image/jpeg' ? 'jpg' : 'png';
@@ -718,7 +743,6 @@ export default function App() {
 
       setExportStatus(i18n[language].encodingVideo);
       
-      let hasAudio = false;
       if (audioFileRef.current && exportFormat !== 'gif') {
         const audioBuffer = await audioFileRef.current.arrayBuffer();
         const ext = audioFileRef.current.name.split('.').pop() || 'mp3';
@@ -726,7 +750,6 @@ export default function App() {
         hasAudio = true;
       }
 
-      const outputName = `output.${exportFormat}`;
       const ffmpegArgs = [];
 
       if (audioOffset > 0) {
@@ -746,10 +769,11 @@ export default function App() {
         ffmpegArgs.push('-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p');
         if (hasAudio) ffmpegArgs.push('-c:a', 'libopus');
       } else if (exportFormat === 'mp4' || exportFormat === 'mov' || exportFormat === 'mkv') {
-        ffmpegArgs.push('-c:v', 'libx264', '-pix_fmt', 'yuv420p');
+        // 使用更快的预设，减少内存占用
+        ffmpegArgs.push('-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'fast', '-crf', '28');
         if (hasAudio) ffmpegArgs.push('-c:a', 'aac');
       } else if (exportFormat === 'gif') {
-        ffmpegArgs.push('-vf', 'split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse');
+        ffmpegArgs.push('-vf', `scale=${exportWidth}:${exportHeight}:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse`);
       }
 
       if (hasAudio && exportFormat !== 'gif') {
@@ -776,21 +800,25 @@ export default function App() {
       a.click();
       URL.revokeObjectURL(url);
 
-      // Cleanup
-      for (let i = 0; i < totalFrames; i++) {
-        const frameName = `frame_${i.toString().padStart(5, '0')}.${frameExt}`;
-        try { await ffmpeg.deleteFile(frameName); } catch (e) {}
-      }
-      if (hasAudio) {
-        const ext = audioFileRef.current!.name.split('.').pop() || 'mp3';
-        try { await ffmpeg.deleteFile(`input_audio.${ext}`); } catch (e) {}
-      }
-      try { await ffmpeg.deleteFile(outputName); } catch (e) {}
-
     } catch (err) {
       console.error("Export failed:", err);
       setFfmpegError(t.conversionFailed + String(err));
     } finally {
+      // 核心修复：必须在 finally 中清理文件，否则失败后再次导出必崩
+      for (let i = 0; i < totalFrames; i++) {
+        const frameName = `frame_${i.toString().padStart(5, '0')}.${frameExt || 'jpg'}`;
+        try { await ffmpeg.deleteFile(frameName); } catch (e) {}
+        const frameNameWebp = `frame_${i.toString().padStart(5, '0')}.webp`;
+        try { await ffmpeg.deleteFile(frameNameWebp); } catch (e) {}
+        const frameNamePng = `frame_${i.toString().padStart(5, '0')}.png`;
+        try { await ffmpeg.deleteFile(frameNamePng); } catch (e) {}
+      }
+      if (hasAudio && audioFileRef.current) {
+        const ext = audioFileRef.current.name.split('.').pop() || 'mp3';
+        try { await ffmpeg.deleteFile(`input_audio.${ext}`); } catch (e) {}
+      }
+      try { await ffmpeg.deleteFile(outputName); } catch (e) {}
+
       setIsExporting(false);
       isExportingRef.current = false;
       setExportStatus('');
