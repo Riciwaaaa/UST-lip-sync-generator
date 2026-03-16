@@ -119,7 +119,10 @@ const i18n = {
     movDesc: "MOV (H.264)",
     mkvDesc: "MKV (H.264)",
     gifDesc: "GIF (无音频)",
-    selected: "已选择: "
+    selected: "已选择: ",
+    notIsolatedError: "环境未开启跨域隔离 (Cross-Origin Isolated)，FFmpeg 无法加载。请检查部署配置 (如 vercel.json)。",
+    renderingFrames: "正在渲染帧",
+    encodingVideo: "正在编码视频...",
   },
   en: {
     title: "UST Lip Sync Generator",
@@ -180,7 +183,10 @@ const i18n = {
     movDesc: "MOV (H.264)",
     mkvDesc: "MKV (H.264)",
     gifDesc: "GIF (No Audio)",
-    selected: "Selected: "
+    selected: "Selected: ",
+    notIsolatedError: "Environment is not cross-origin isolated. FFmpeg cannot load. Please check your deployment settings (e.g., vercel.json).",
+    renderingFrames: "Rendering frames",
+    encodingVideo: "Encoding video...",
   },
   ja: {
     title: "USTリップシンクジェネレーター",
@@ -241,17 +247,20 @@ const i18n = {
     movDesc: "MOV (H.264)",
     mkvDesc: "MKV (H.264)",
     gifDesc: "GIF (音声なし)",
-    selected: "選択中: "
+    selected: "選択中: ",
+    notIsolatedError: "環境がクロスオリジン分離(Cross-Origin Isolated)されていません。FFmpegを読み込めません。デプロイ設定(vercel.jsonなど)を確認してください。",
+    renderingFrames: "フレームをレンダリング中",
+    encodingVideo: "動画をエンコード中...",
   }
 };
 
 const getMouthShapeConfigs = (t: any): { id: MouthShape; label: string; color: string; bg: string; canvasBg: string; canvasColor: string }[] => [
-  { id: 'a', label: t.mouthA, color: 'text-red-400', bg: 'bg-red-500/20 border-red-500/30 hover:bg-red-500/30', canvasBg: 'rgba(239, 68, 68, 0.2)', canvasColor: 'rgba(248, 113, 113, 0.5)' },
-  { id: 'i', label: t.mouthI, color: 'text-blue-400', bg: 'bg-blue-500/20 border-blue-500/30 hover:bg-blue-500/30', canvasBg: 'rgba(59, 130, 246, 0.2)', canvasColor: 'rgba(96, 165, 250, 0.5)' },
-  { id: 'u', label: t.mouthU, color: 'text-green-400', bg: 'bg-green-500/20 border-green-500/30 hover:bg-green-500/30', canvasBg: 'rgba(34, 197, 94, 0.2)', canvasColor: 'rgba(74, 222, 128, 0.5)' },
-  { id: 'e', label: t.mouthE, color: 'text-yellow-400', bg: 'bg-yellow-500/20 border-yellow-500/30 hover:bg-yellow-500/30', canvasBg: 'rgba(234, 179, 8, 0.2)', canvasColor: 'rgba(250, 204, 21, 0.5)' },
-  { id: 'o', label: t.mouthO, color: 'text-purple-400', bg: 'bg-purple-500/20 border-purple-500/30 hover:bg-purple-500/30', canvasBg: 'rgba(168, 85, 247, 0.2)', canvasColor: 'rgba(192, 132, 252, 0.5)' },
-  { id: 'default', label: t.mouthDefault, color: 'text-zinc-300', bg: 'bg-zinc-700/50 border-zinc-600 hover:bg-zinc-700/70', canvasBg: 'rgba(63, 63, 70, 0.5)', canvasColor: 'rgba(212, 212, 216, 0.5)' },
+  { id: 'a', label: t.mouthA, color: 'text-red-600', bg: 'bg-red-500/20 border-red-500/30 hover:bg-red-500/30', canvasBg: 'rgba(239, 68, 68, 0.2)', canvasColor: 'rgba(248, 113, 113, 0.5)' },
+  { id: 'i', label: t.mouthI, color: 'text-blue-600', bg: 'bg-blue-500/20 border-blue-500/30 hover:bg-blue-500/30', canvasBg: 'rgba(59, 130, 246, 0.2)', canvasColor: 'rgba(96, 165, 250, 0.5)' },
+  { id: 'u', label: t.mouthU, color: 'text-green-600', bg: 'bg-green-500/20 border-green-500/30 hover:bg-green-500/30', canvasBg: 'rgba(34, 197, 94, 0.2)', canvasColor: 'rgba(74, 222, 128, 0.5)' },
+  { id: 'e', label: t.mouthE, color: 'text-yellow-600', bg: 'bg-yellow-500/20 border-yellow-500/30 hover:bg-yellow-500/30', canvasBg: 'rgba(234, 179, 8, 0.2)', canvasColor: 'rgba(250, 204, 21, 0.5)' },
+  { id: 'o', label: t.mouthO, color: 'text-purple-600', bg: 'bg-purple-500/20 border-purple-500/30 hover:bg-purple-500/30', canvasBg: 'rgba(168, 85, 247, 0.2)', canvasColor: 'rgba(192, 132, 252, 0.5)' },
+  { id: 'default', label: t.mouthDefault, color: 'text-zinc-700', bg: 'bg-zinc-200/50 border-zinc-300 hover:bg-zinc-200/70', canvasBg: 'rgba(63, 63, 70, 0.5)', canvasColor: 'rgba(212, 212, 216, 0.5)' },
 ];
 
 export default function App() {
@@ -302,10 +311,9 @@ export default function App() {
   const startTimeRef = useRef<number>(0);
 
   // 录制状态
-  const [isRecording, setIsRecording] = useState(false);
-  const isRecordingRef = useRef(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordedChunksRef = useRef<Blob[]>([]);
+  const [exportStatus, setExportStatus] = useState('');
+  const isExportingRef = useRef(false);
+  const audioFileRef = useRef<File | null>(null);
 
   // 新增：音频、背景、FFmpeg 导出状态
   const [audioUrl, setAudioUrl] = useState<string>('');
@@ -408,10 +416,16 @@ export default function App() {
   // 初始化 FFmpeg
   useEffect(() => {
     const loadFFmpeg = async () => {
+      if (!window.crossOriginIsolated) {
+        setFfmpegError(i18n[language].notIsolatedError);
+        return;
+      }
       try {
         const ffmpeg = ffmpegRef.current;
         ffmpeg.on('progress', ({ progress }) => {
-          setExportProgress(Math.round(progress * 100));
+          if (isExportingRef.current) {
+            setExportProgress(50 + Math.round(progress * 50));
+          }
         });
         await ffmpeg.load({
           coreURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js',
@@ -420,11 +434,11 @@ export default function App() {
         setFfmpegLoaded(true);
       } catch (err) {
         console.error('FFmpeg load error:', err);
-        setFfmpegError(t.ffmpegNotLoaded);
+        setFfmpegError(i18n[language].ffmpegNotLoaded);
       }
     };
     loadFFmpeg();
-  }, []);
+  }, [language]);
 
   const drawCanvas = (mouth: MouthShape, time: number = currentTime, lyric: string = '') => {
     const canvas = canvasRef.current;
@@ -525,12 +539,6 @@ export default function App() {
       if (audioRef.current) {
         audioRef.current.pause();
       }
-
-      if (isRecordingRef.current) {
-        mediaRecorderRef.current?.stop();
-        isRecordingRef.current = false;
-        // setIsRecording(false) will be handled in onstop
-      }
       return;
     }
 
@@ -569,12 +577,6 @@ export default function App() {
       isPlayingRef.current = false;
       if (reqRef.current) cancelAnimationFrame(reqRef.current);
       if (audioRef.current) audioRef.current.pause();
-      
-      if (isRecordingRef.current) {
-        mediaRecorderRef.current?.stop();
-        isRecordingRef.current = false;
-        setIsRecording(false);
-      }
     } else {
       setIsPlaying(true);
       isPlayingRef.current = true;
@@ -633,152 +635,163 @@ export default function App() {
     }
   };
 
-  const convertAndDownload = async (webmBlob: Blob) => {
-    if (exportFormat === 'webm') {
-      const url = URL.createObjectURL(webmBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `utau-lipsync-${Date.now()}.webm`;
-      a.click();
-      URL.revokeObjectURL(url);
-      setIsExporting(false);
-      setIsRecording(false);
-      return;
-    }
-
+  const exportVideoOffline = async () => {
+    if (!parsedData) return;
     if (!ffmpegLoaded) {
-      alert(t.ffmpegNotLoadedAlert);
-      const url = URL.createObjectURL(webmBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `utau-lipsync-${Date.now()}.webm`;
-      a.click();
-      URL.revokeObjectURL(url);
-      setIsExporting(false);
-      setIsRecording(false);
+      alert(i18n[language].notIsolatedError);
       return;
     }
-
+    
     setIsExporting(true);
+    isExportingRef.current = true;
+    setExportProgress(0);
+    setExportStatus(i18n[language].renderingFrames);
+    setFfmpegError('');
+
+    // Pause playback if playing
+    if (isPlaying) {
+      togglePlay();
+    }
+
     const ffmpeg = ffmpegRef.current;
-    const inputName = 'input.webm';
-    const outputName = `output.${exportFormat}`;
+    const fps = 30;
+    const lastNote = parsedData.notes[parsedData.notes.length - 1];
+    const totalDurationMs = lastNote ? lastNote.startTime + lastNote.duration : 0;
+    const totalFrames = Math.ceil((totalDurationMs + 500) / 1000 * fps); // 500ms padding
+    
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      setIsExporting(false);
+      isExportingRef.current = false;
+      return;
+    }
 
     try {
-      await ffmpeg.writeFile(inputName, await fetchFile(webmBlob));
-      
-      let ffmpegArgs = ['-i', inputName];
-      
-      if (exportFormat === 'gif') {
-        // GIF doesn't support audio
-        ffmpegArgs.push('-vf', 'fps=15,scale=512:-1:flags=lanczos', '-c:v', 'gif', '-an');
-      } else {
-        // MP4, MOV, MKV
-        ffmpegArgs.push('-c:v', 'libx264', '-preset', 'fast', '-crf', '22', '-c:a', 'aac', '-b:a', '128k');
+      // 1. Render frames
+      for (let i = 0; i < totalFrames; i++) {
+        const timeMs = (i / fps) * 1000;
+        
+        let activeNote: NoteData | null = null;
+        let l = 0, r = parsedData.notes.length - 1;
+        while (l <= r) {
+          const m = Math.floor((l + r) / 2);
+          const note = parsedData.notes[m];
+          if (timeMs >= note.startTime && timeMs < note.startTime + note.duration) {
+            activeNote = note;
+            break;
+          } else if (timeMs < note.startTime) {
+            r = m - 1;
+          } else {
+            l = m + 1;
+          }
+        }
+        
+        const mouth = activeNote ? getMouthShape(activeNote.cleanedLyric) : 'default';
+        const lyric = activeNote ? activeNote.cleanedLyric : '';
+        
+        drawCanvas(mouth, timeMs, lyric);
+        
+        const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
+        if (blob) {
+          const buffer = await blob.arrayBuffer();
+          const frameName = `frame_${i.toString().padStart(5, '0')}.png`;
+          await ffmpeg.writeFile(frameName, new Uint8Array(buffer));
+        }
+        
+        if (i % 5 === 0) {
+          setExportProgress(Math.round((i / totalFrames) * 50));
+          setExportStatus(`${i18n[language].renderingFrames} ${i}/${totalFrames}`);
+          await new Promise(resolve => setTimeout(resolve, 0)); // Yield
+        }
       }
+
+      setExportStatus(i18n[language].encodingVideo);
       
+      let hasAudio = false;
+      if (audioFileRef.current && exportFormat !== 'gif') {
+        const audioBuffer = await audioFileRef.current.arrayBuffer();
+        const ext = audioFileRef.current.name.split('.').pop() || 'mp3';
+        await ffmpeg.writeFile(`input_audio.${ext}`, new Uint8Array(audioBuffer));
+        hasAudio = true;
+      }
+
+      const outputName = `output.${exportFormat}`;
+      const ffmpegArgs = [];
+
+      if (audioOffset > 0) {
+        ffmpegArgs.push('-itsoffset', (audioOffset / 1000).toString());
+      }
+      ffmpegArgs.push('-framerate', `${fps}`, '-i', 'frame_%05d.png');
+
+      if (hasAudio) {
+        if (audioOffset < 0) {
+          ffmpegArgs.push('-itsoffset', (Math.abs(audioOffset) / 1000).toString());
+        }
+        const ext = audioFileRef.current!.name.split('.').pop() || 'mp3';
+        ffmpegArgs.push('-i', `input_audio.${ext}`);
+      }
+
+      if (exportFormat === 'webm') {
+        ffmpegArgs.push('-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p');
+        if (hasAudio) ffmpegArgs.push('-c:a', 'libopus');
+      } else if (exportFormat === 'mp4' || exportFormat === 'mov' || exportFormat === 'mkv') {
+        ffmpegArgs.push('-c:v', 'libx264', '-pix_fmt', 'yuv420p');
+        if (hasAudio) ffmpegArgs.push('-c:a', 'aac');
+      } else if (exportFormat === 'gif') {
+        ffmpegArgs.push('-vf', 'split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse');
+      }
+
+      if (hasAudio && exportFormat !== 'gif') {
+        ffmpegArgs.push('-map', '0:v:0', '-map', '1:a:0', '-shortest');
+      }
+
       ffmpegArgs.push(outputName);
-      
+
       await ffmpeg.exec(ffmpegArgs);
+
+      const fileData = await ffmpeg.readFile(outputName);
+      const data = new Uint8Array(fileData as ArrayBuffer);
       
-      const data = await ffmpeg.readFile(outputName);
-      const url = URL.createObjectURL(new Blob([data], { type: `video/${exportFormat === 'mkv' ? 'x-matroska' : exportFormat}` }));
-      
+      const mimeType = exportFormat === 'webm' ? 'video/webm' : 
+                       exportFormat === 'mp4' ? 'video/mp4' : 
+                       exportFormat === 'mov' ? 'video/quicktime' : 
+                       exportFormat === 'mkv' ? 'video/x-matroska' : 'image/gif';
+                       
+      const blob = new Blob([data.buffer], { type: mimeType });
+      const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `utau-lipsync-${Date.now()}.${exportFormat}`;
+      a.download = `lipsync_${Date.now()}.${exportFormat}`;
       a.click();
       URL.revokeObjectURL(url);
-      
+
+      // Cleanup
+      for (let i = 0; i < totalFrames; i++) {
+        const frameName = `frame_${i.toString().padStart(5, '0')}.png`;
+        try { await ffmpeg.deleteFile(frameName); } catch (e) {}
+      }
+      if (hasAudio) {
+        const ext = audioFileRef.current!.name.split('.').pop() || 'mp3';
+        try { await ffmpeg.deleteFile(`input_audio.${ext}`); } catch (e) {}
+      }
+      try { await ffmpeg.deleteFile(outputName); } catch (e) {}
+
     } catch (err) {
-      console.error('Conversion error:', err);
-      alert(t.conversionFailed + err);
+      console.error("Export failed:", err);
+      setFfmpegError(t.conversionFailed + String(err));
     } finally {
       setIsExporting(false);
-      setIsRecording(false);
+      isExportingRef.current = false;
+      setExportStatus('');
+      setExportProgress(0);
+      const activeNote = parsedData.notes.find(n => currentTime >= n.startTime && currentTime < n.startTime + n.duration);
+      drawCanvas(currentMouth, currentTime, activeNote ? activeNote.cleanedLyric : '');
     }
-  };
-
-  const startRecording = () => {
-    if (!parsedDataRef.current) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    // 捕获画布流 (60fps)
-    const canvasStream = canvas.captureStream(60);
-    
-    // 合并音频流
-    const tracks = [...canvasStream.getVideoTracks()];
-    if (audioRef.current && exportFormat !== 'gif') {
-      try {
-        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const dest = audioCtx.createMediaStreamDestination();
-        // We need to create a new audio element or use the existing one.
-        // Using captureStream on audio element is easier if supported.
-        const audioStream = (audioRef.current as any).captureStream ? (audioRef.current as any).captureStream() : null;
-        if (audioStream) {
-            tracks.push(...audioStream.getAudioTracks());
-        } else {
-            // Fallback for browsers that don't support audio.captureStream
-            const source = audioCtx.createMediaElementSource(audioRef.current);
-            source.connect(dest);
-            source.connect(audioCtx.destination);
-            tracks.push(...dest.stream.getAudioTracks());
-        }
-      } catch (e) {
-        console.error("Failed to capture audio stream:", e);
-      }
-    }
-
-    const combinedStream = new MediaStream(tracks);
-    
-    // 优先使用 vp9 编码以支持透明通道
-    let options = { mimeType: 'video/webm; codecs=vp9' };
-    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-      options = { mimeType: 'video/webm; codecs=vp8' };
-    }
-
-    const recorder = new MediaRecorder(combinedStream, options);
-    recordedChunksRef.current = [];
-
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) recordedChunksRef.current.push(e.data);
-    };
-
-    recorder.onstop = () => {
-      const blob = new Blob(recordedChunksRef.current, { type: options.mimeType });
-      convertAndDownload(blob);
-    };
-
-    mediaRecorderRef.current = recorder;
-    recorder.start();
-
-    setIsRecording(true);
-    isRecordingRef.current = true;
-
-    // 强制从头开始播放
-    setIsPlaying(true);
-    isPlayingRef.current = true;
-    setCurrentTime(0);
-    
-    if (audioRef.current && audioUrl) {
-      const targetAudioTime = audioOffsetRef.current / 1000;
-      audioRef.current.currentTime = Math.max(0, targetAudioTime);
-      audioRef.current.play().catch(e => console.error("Audio play failed:", e));
-    } else {
-      startTimeRef.current = performance.now();
-    }
-    
-    if (reqRef.current) cancelAnimationFrame(reqRef.current);
-    reqRef.current = requestAnimationFrame(updateFrame);
   };
 
   useEffect(() => {
     return () => {
       if (reqRef.current) cancelAnimationFrame(reqRef.current);
-      if (mediaRecorderRef.current && isRecordingRef.current) {
-        mediaRecorderRef.current.stop();
-      }
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.src = '';
@@ -985,6 +998,7 @@ export default function App() {
   const handleAudioUpload = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      audioFileRef.current = file;
       const url = createTrackedURL(file);
       setAudioUrl(prev => {
         if (prev) revokeTrackedURL(prev);
@@ -1100,19 +1114,19 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-zinc-950 text-zinc-100 font-sans selection:bg-indigo-500/30 overflow-hidden">
+    <div className="flex flex-col h-screen bg-zinc-50 text-zinc-900 font-sans selection:bg-indigo-500/30 overflow-hidden">
       {/* Header */}
-      <header className="flex-none h-16 w-full backdrop-blur-md bg-zinc-950/80 border-b border-zinc-800 z-40">
+      <header className="flex-none h-16 w-full backdrop-blur-md bg-zinc-50/80 border-b border-zinc-200 z-40">
         <div className="max-w-7xl mx-auto px-4 h-full flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <Music className="w-6 h-6 text-indigo-400" />
-            <span className="font-semibold text-zinc-100">{t.title}</span>
+            <Music className="w-6 h-6 text-indigo-600" />
+            <span className="font-semibold text-zinc-900">{t.title}</span>
           </div>
           <div className="flex items-center space-x-4">
-            <button onClick={() => setShowModal(true)} className="text-sm text-zinc-400 hover:text-zinc-100 transition-colors">
+            <button onClick={() => setShowModal(true)} className="text-sm text-zinc-600 hover:text-zinc-900 transition-colors">
               {t.language}
             </button>
-            <button onClick={() => setShowModal(true)} className="text-sm text-zinc-400 hover:text-zinc-100 transition-colors">
+            <button onClick={() => setShowModal(true)} className="text-sm text-zinc-600 hover:text-zinc-900 transition-colors">
               {t.notice}
             </button>
           </div>
@@ -1122,10 +1136,10 @@ export default function App() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
+          <div className="bg-white border border-zinc-200 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
             <div className="p-6 space-y-6">
               <div className="space-y-2 text-center">
-                <h3 className="text-xl font-semibold text-zinc-100">{t.language}</h3>
+                <h3 className="text-xl font-semibold text-zinc-900">{t.language}</h3>
                 <div className="flex justify-center space-x-2">
                   {(['zh', 'en', 'ja'] as Language[]).map(lang => (
                     <button
@@ -1134,7 +1148,7 @@ export default function App() {
                       className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                         language === lang 
                           ? 'bg-indigo-500 text-white' 
-                          : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'
+                          : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200 hover:text-zinc-800'
                       }`}
                     >
                       {lang === 'zh' ? '中文' : lang === 'en' ? 'English' : '日本語'}
@@ -1144,14 +1158,14 @@ export default function App() {
               </div>
               
               <div className="space-y-2">
-                <h3 className="text-xl font-semibold text-zinc-100 text-center">{t.noticeTitle}</h3>
-                <div className="h-40 bg-zinc-950 rounded-lg p-4 overflow-y-auto border border-zinc-800 text-sm text-zinc-400">
+                <h3 className="text-xl font-semibold text-zinc-900 text-center">{t.noticeTitle}</h3>
+                <div className="h-40 bg-zinc-50 rounded-lg p-4 overflow-y-auto border border-zinc-200 text-sm text-zinc-600 whitespace-pre-wrap">
                   {t.noticeContent}
                 </div>
               </div>
             </div>
             
-            <div className="p-4 bg-zinc-950/50 border-t border-zinc-800">
+            <div className="p-4 bg-zinc-50/50 border-t border-zinc-200">
               <button
                 onClick={handleCloseModal}
                 className="w-full py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg font-medium transition-colors"
@@ -1170,18 +1184,18 @@ export default function App() {
           
           {/* Header */}
           <header className="space-y-4 text-center">
-            <h1 className="text-4xl font-semibold tracking-tight text-zinc-50">
+            <h1 className="text-4xl font-semibold tracking-tight text-zinc-950">
               {t.title}
             </h1>
-            <p className="text-zinc-400 text-lg">
+            <p className="text-zinc-600 text-lg">
               {t.subtitle}
             </p>
           </header>
 
         {/* Step 1: Actors */}
         <section className="space-y-6">
-          <div className="flex items-center space-x-3 border-b border-zinc-800 pb-4">
-            <div className="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold">1</div>
+          <div className="flex items-center space-x-3 border-b border-zinc-200 pb-4">
+            <div className="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-600 flex items-center justify-center font-bold">1</div>
             <h2 className="text-2xl font-semibold">{t.step1}</h2>
           </div>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-4">
@@ -1215,14 +1229,14 @@ export default function App() {
         {/* Custom Overrides */}
         {uniqueLyrics.length > 0 && (
           <section className="space-y-6">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+            <div className="flex items-center justify-between border-b border-zinc-200 pb-4">
               <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center font-bold">
+                <div className="w-8 h-8 rounded-full bg-purple-500/20 text-purple-600 flex items-center justify-center font-bold">
                   <Settings className="w-4 h-4" />
                 </div>
                 <h2 className="text-2xl font-semibold">{t.specialLyrics}</h2>
               </div>
-              <span className="text-sm text-zinc-400">{t.detectedSounds.replace('{count}', uniqueLyrics.length.toString())}</span>
+              <span className="text-sm text-zinc-600">{t.detectedSounds.replace('{count}', uniqueLyrics.length.toString())}</span>
             </div>
             
             <div className="grid grid-cols-[repeat(auto-fill,minmax(80px,1fr))] gap-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
@@ -1234,7 +1248,7 @@ export default function App() {
                 return (
                   <label key={lyric} className={`
                     relative flex flex-col items-center justify-center aspect-square rounded-xl border cursor-pointer overflow-hidden transition-all
-                    ${hasOverride ? 'bg-purple-900/20 border-purple-500/50 hover:border-purple-400' : 'bg-zinc-800/50 border-zinc-700/50 hover:border-zinc-500'}
+                    ${hasOverride ? 'bg-purple-500/10 border-purple-500/50 hover:border-purple-400' : 'bg-zinc-100/50 border-zinc-300/50 hover:border-zinc-500'}
                   `}>
                     <input
                       type="file"
@@ -1254,7 +1268,7 @@ export default function App() {
                     </div>
                     
                     {!hasOverride && (
-                      <div className="absolute top-1 right-1 px-1.5 py-0.5 bg-zinc-800/80 backdrop-blur text-[8px] font-mono text-zinc-400 rounded">
+                      <div className="absolute top-1 right-1 px-1.5 py-0.5 bg-zinc-100/80 backdrop-blur text-[8px] font-mono text-zinc-600 rounded">
                         {baseShape}
                       </div>
                     )}
@@ -1271,8 +1285,8 @@ export default function App() {
 
         {/* Step 2: Script & Assets */}
         <section className="space-y-6">
-          <div className="flex items-center space-x-3 border-b border-zinc-800 pb-4">
-            <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">2</div>
+          <div className="flex items-center space-x-3 border-b border-zinc-200 pb-4">
+            <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-600 flex items-center justify-center font-bold">2</div>
             <h2 className="text-2xl font-semibold">{t.step2}</h2>
           </div>
           
@@ -1288,16 +1302,16 @@ export default function App() {
                 w-full h-48 rounded-3xl border-2 border-dashed transition-all duration-300 ease-out
                 ${isDragging 
                   ? 'border-emerald-500 bg-emerald-500/10 scale-[1.02]' 
-                  : 'border-zinc-800 bg-zinc-900/50 hover:border-zinc-600 hover:bg-zinc-900'}
+                  : 'border-zinc-200 bg-white/50 hover:border-zinc-300 hover:bg-white'}
               `}
             >
               <input type="file" ref={fileInputRef} onChange={(e) => e.target.files && handleFile(e.target.files[0])} accept=".ust" className="hidden" />
               <div className="flex flex-col items-center space-y-4 pointer-events-none">
-                <div className={`p-4 rounded-full transition-colors duration-300 ${isDragging ? 'bg-emerald-500/20 text-emerald-400' : 'bg-zinc-800 text-zinc-400 group-hover:bg-zinc-700 group-hover:text-zinc-300'}`}>
+                <div className={`p-4 rounded-full transition-colors duration-300 ${isDragging ? 'bg-emerald-500/20 text-emerald-600' : 'bg-zinc-100 text-zinc-600 group-hover:bg-zinc-200 group-hover:text-zinc-700'}`}>
                   <FileText className="w-8 h-8" />
                 </div>
                 <div className="text-center space-y-1">
-                  <p className="text-lg font-medium text-zinc-200">
+                  <p className="text-lg font-medium text-zinc-800">
                     {fileName ? `${t.selected}${fileName}` : t.uploadUst}
                   </p>
                   <p className="text-sm text-zinc-500">{t.uploadUstDesc}</p>
@@ -1306,14 +1320,14 @@ export default function App() {
             </div>
 
             {/* Audio Upload */}
-            <label className="relative group cursor-pointer flex flex-col items-center justify-center w-full h-48 rounded-3xl border-2 border-dashed border-zinc-800 bg-zinc-900/50 hover:border-zinc-600 hover:bg-zinc-900 transition-all duration-300 ease-out">
+            <label className="relative group cursor-pointer flex flex-col items-center justify-center w-full h-48 rounded-3xl border-2 border-dashed border-zinc-200 bg-white/50 hover:border-zinc-300 hover:bg-white transition-all duration-300 ease-out">
               <input type="file" accept="audio/*" onChange={handleAudioUpload} className="hidden" />
               <div className="flex flex-col items-center space-y-4 pointer-events-none">
-                <div className="p-4 rounded-full bg-zinc-800 text-zinc-400 group-hover:bg-zinc-700 group-hover:text-zinc-300 transition-colors duration-300">
+                <div className="p-4 rounded-full bg-zinc-100 text-zinc-600 group-hover:bg-zinc-200 group-hover:text-zinc-700 transition-colors duration-300">
                   <Music className="w-8 h-8" />
                 </div>
                 <div className="text-center space-y-1">
-                  <p className="text-lg font-medium text-zinc-200">
+                  <p className="text-lg font-medium text-zinc-800">
                     {audioUrl ? t.audioUploaded : t.uploadAudio}
                   </p>
                   <p className="text-sm text-zinc-500">{t.uploadAudioDesc}</p>
@@ -1323,17 +1337,17 @@ export default function App() {
             </label>
 
             {/* Background Upload */}
-            <label className="relative group cursor-pointer flex flex-col items-center justify-center w-full h-48 rounded-3xl border-2 border-dashed border-zinc-800 bg-zinc-900/50 hover:border-zinc-600 hover:bg-zinc-900 transition-all duration-300 ease-out overflow-hidden">
+            <label className="relative group cursor-pointer flex flex-col items-center justify-center w-full h-48 rounded-3xl border-2 border-dashed border-zinc-200 bg-white/50 hover:border-zinc-300 hover:bg-white transition-all duration-300 ease-out overflow-hidden">
               <input type="file" accept="image/*" onChange={handleBgImageUpload} className="hidden" />
               {bgImageUrl ? (
                 <img src={bgImageUrl} alt="Background" className="absolute inset-0 w-full h-full object-cover opacity-50" />
               ) : null}
               <div className="flex flex-col items-center space-y-4 z-10 pointer-events-none">
-                <div className="p-4 rounded-full bg-zinc-800 text-zinc-400 group-hover:bg-zinc-700 group-hover:text-zinc-300 transition-colors duration-300">
+                <div className="p-4 rounded-full bg-zinc-100 text-zinc-600 group-hover:bg-zinc-200 group-hover:text-zinc-700 transition-colors duration-300">
                   <Layers className="w-8 h-8" />
                 </div>
                 <div className="text-center space-y-1">
-                  <p className="text-lg font-medium text-zinc-200">
+                  <p className="text-lg font-medium text-zinc-800">
                     {bgImageUrl ? t.bgUploaded : t.uploadBg}
                   </p>
                   <p className="text-sm text-zinc-500">{t.uploadBgDesc}</p>
@@ -1343,7 +1357,7 @@ export default function App() {
           </div>
 
           {error && (
-            <div className="flex items-center space-x-2 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400">
+            <div className="flex items-center space-x-2 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600">
               <AlertCircle className="w-5 h-5 flex-shrink-0" />
               <p className="text-sm font-medium">{error}</p>
             </div>
@@ -1353,48 +1367,48 @@ export default function App() {
         {/* Data Table */}
         {parsedData && (
           <section className="space-y-4">
-            <details className="group rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden shadow-xl">
-              <summary className="list-none [&::-webkit-details-marker]:hidden px-6 py-4 font-medium text-zinc-300 cursor-pointer hover:bg-zinc-800/50 transition-colors flex items-center justify-between">
+            <details className="group rounded-xl border border-zinc-200 bg-white/50 overflow-hidden shadow-xl">
+              <summary className="list-none [&::-webkit-details-marker]:hidden px-6 py-4 font-medium text-zinc-700 cursor-pointer hover:bg-zinc-100/50 transition-colors flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  <FileText className="w-5 h-5 text-zinc-400" />
+                  <FileText className="w-5 h-5 text-zinc-600" />
                   <span>{t.parsedData.replace('{count}', parsedData.notes.length.toString())}</span>
                 </div>
                 <span className="text-zinc-500 group-open:rotate-180 transition-transform">▼</span>
               </summary>
-              <div className="overflow-x-auto custom-scrollbar max-h-[400px] border-t border-zinc-800">
+              <div className="overflow-x-auto custom-scrollbar max-h-[400px] border-t border-zinc-200">
                 <table className="w-full text-left text-sm whitespace-nowrap">
-                  <thead className="bg-zinc-900/80 sticky top-0 z-10 backdrop-blur-sm border-b border-zinc-800">
+                  <thead className="bg-white/80 sticky top-0 z-10 backdrop-blur-sm border-b border-zinc-200">
                     <tr>
-                      <th className="px-6 py-4 font-medium text-zinc-400 w-24">{t.index}</th>
-                      <th className="px-6 py-4 font-medium text-zinc-400">{t.originalLyric}</th>
-                      <th className="px-6 py-4 font-medium text-zinc-400">{t.cleanedLyric}</th>
-                      <th className="px-6 py-4 font-medium text-zinc-400">{t.mappedMouth}</th>
-                      <th className="px-6 py-4 font-medium text-zinc-400 text-right">Start (ms)</th>
-                      <th className="px-6 py-4 font-medium text-zinc-400 text-right">Duration (ms)</th>
+                      <th className="px-6 py-4 font-medium text-zinc-600 w-24">{t.index}</th>
+                      <th className="px-6 py-4 font-medium text-zinc-600">{t.originalLyric}</th>
+                      <th className="px-6 py-4 font-medium text-zinc-600">{t.cleanedLyric}</th>
+                      <th className="px-6 py-4 font-medium text-zinc-600">{t.mappedMouth}</th>
+                      <th className="px-6 py-4 font-medium text-zinc-600 text-right">Start (ms)</th>
+                      <th className="px-6 py-4 font-medium text-zinc-600 text-right">Duration (ms)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-800/50">
                     {parsedData.notes.map((note, idx) => {
                       const isCurrent = currentTime >= note.startTime && currentTime < note.startTime + note.duration;
                       return (
-                        <tr key={idx} className={`transition-colors ${isCurrent ? 'bg-indigo-500/20' : 'hover:bg-zinc-800/30'}`}>
+                        <tr key={idx} className={`transition-colors ${isCurrent ? 'bg-indigo-500/20' : 'hover:bg-zinc-100/30'}`}>
                           <td className="px-6 py-3 font-mono text-zinc-500">[{note.index}]</td>
-                          <td className="px-6 py-3 text-zinc-300">{note.originalLyric}</td>
+                          <td className="px-6 py-3 text-zinc-700">{note.originalLyric}</td>
                           <td className="px-6 py-3">
                             <input
                               type="text"
                               value={note.cleanedLyric}
                               onChange={(e) => handleLyricChange(idx, e.target.value)}
-                              className="w-20 bg-zinc-950/50 border border-zinc-700/50 rounded px-2 py-1 text-indigo-300 font-medium focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                              className="w-20 bg-zinc-50/50 border border-zinc-300/50 rounded px-2 py-1 text-indigo-600 font-medium focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
                             />
                           </td>
                           <td className="px-6 py-3">
-                            <span className="px-2 py-1 rounded bg-zinc-800 text-zinc-300 font-mono text-xs">
+                            <span className="px-2 py-1 rounded bg-zinc-100 text-zinc-700 font-mono text-xs">
                               {getMouthShape(note.cleanedLyric)}
                             </span>
                           </td>
-                          <td className="px-6 py-3 font-mono text-zinc-400 text-right">{note.startTime.toFixed(2)}</td>
-                          <td className="px-6 py-3 font-mono text-zinc-400 text-right">{note.duration.toFixed(2)}</td>
+                          <td className="px-6 py-3 font-mono text-zinc-600 text-right">{note.startTime.toFixed(2)}</td>
+                          <td className="px-6 py-3 font-mono text-zinc-600 text-right">{note.duration.toFixed(2)}</td>
                         </tr>
                       );
                     })}
@@ -1407,19 +1421,19 @@ export default function App() {
       </div>
 
       {/* Right Monitor */}
-      <div className="w-[40%] h-full bg-zinc-900/30 border-l border-zinc-800 overflow-y-auto custom-scrollbar relative">
+      <div className="w-[40%] h-full bg-white/30 border-l border-zinc-200 overflow-y-auto custom-scrollbar relative">
         <div className="sticky top-0 p-8 space-y-8">
           {/* Step 3: Monitor */}
           {parsedData ? (
             <section className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
-              <div className="flex items-center space-x-3 border-b border-zinc-800 pb-4">
-              <div className="w-8 h-8 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">3</div>
+              <div className="flex items-center space-x-3 border-b border-zinc-200 pb-4">
+              <div className="w-8 h-8 rounded-full bg-amber-500/20 text-amber-600 flex items-center justify-center font-bold">3</div>
               <h2 className="text-2xl font-semibold">{t.step3}</h2>
             </div>
             
             <div className="flex flex-col items-center space-y-8">
               {/* Canvas Container */}
-              <div className="relative w-full max-w-2xl aspect-video rounded-3xl border-4 border-zinc-800 bg-zinc-900 shadow-2xl overflow-hidden flex items-center justify-center bg-checkered">
+              <div className="relative w-full max-w-2xl aspect-video rounded-3xl border-4 border-zinc-200 bg-white shadow-2xl overflow-hidden flex items-center justify-center bg-checkered">
                 <canvas 
                   ref={canvasRef} 
                   width={canvasSize.width} 
@@ -1427,23 +1441,16 @@ export default function App() {
                   className="w-full h-full object-contain"
                 />
                 
-                <div className="absolute top-4 right-4 px-3 py-1 rounded-full bg-black/50 backdrop-blur-md border border-white/10 text-xs font-mono text-white/80 z-10">
+                <div className="absolute top-4 right-4 px-3 py-1 rounded-full bg-white/50 backdrop-blur-md border border-black/10 text-xs font-mono text-black/80 z-10">
                   {currentMouth} | {canvasSize.width}x{canvasSize.height}
                 </div>
-                
-                {isRecording && (
-                  <div className="absolute top-4 left-4 flex items-center space-x-2 px-3 py-1 rounded-full bg-red-500/20 backdrop-blur-md border border-red-500/30 text-xs font-medium text-red-400 z-10">
-                    <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                    <span>REC</span>
-                  </div>
-                )}
               </div>
 
               {/* Controls */}
               <div className="flex flex-col items-center space-y-6 w-full max-w-2xl">
                 
                 {/* Settings Row */}
-                <div className="flex flex-wrap items-center justify-between w-full gap-4 bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800">
+                <div className="flex flex-wrap items-center justify-between w-full gap-4 bg-white/50 p-4 rounded-2xl border border-zinc-200">
                   <div className="flex items-center space-x-4">
                     <div className="flex flex-col space-y-1">
                       <label className="text-xs text-zinc-500 font-medium">{t.width}</label>
@@ -1452,7 +1459,7 @@ export default function App() {
                         placeholder="Auto"
                         value={customWidth}
                         onChange={(e) => setCustomWidth(e.target.value)}
-                        className="w-20 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        className="w-20 bg-zinc-100 border border-zinc-300 rounded-lg px-2 py-1 text-sm text-zinc-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                       />
                     </div>
                     <div className="flex flex-col space-y-1">
@@ -1462,7 +1469,7 @@ export default function App() {
                         placeholder="Auto"
                         value={customHeight}
                         onChange={(e) => setCustomHeight(e.target.value)}
-                        className="w-20 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        className="w-20 bg-zinc-100 border border-zinc-300 rounded-lg px-2 py-1 text-sm text-zinc-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                       />
                     </div>
                   </div>
@@ -1473,14 +1480,14 @@ export default function App() {
                       type="number" 
                       value={audioOffset}
                       onChange={(e) => setAudioOffset(Number(e.target.value))}
-                      className="w-24 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      className="w-24 bg-zinc-100 border border-zinc-300 rounded-lg px-2 py-1 text-sm text-zinc-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                     />
                   </div>
                 </div>
 
                 {/* Scrubber */}
                 <div className="w-full space-y-2">
-                  <div className="flex justify-between text-sm font-mono text-zinc-400">
+                  <div className="flex justify-between text-sm font-mono text-zinc-600">
                     <span>{formatTime(currentTime)}</span>
                     <span>{parsedData.notes.length > 0 ? formatTime(parsedData.notes[parsedData.notes.length - 1].startTime + parsedData.notes[parsedData.notes.length - 1].duration) : '00:00.000'}</span>
                   </div>
@@ -1491,14 +1498,14 @@ export default function App() {
                     step="1"
                     value={currentTime}
                     onChange={handleSeek}
-                    className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                    className="w-full h-2 bg-zinc-100 rounded-lg appearance-none cursor-pointer accent-indigo-500"
                   />
                 </div>
 
                 <div className="flex items-center justify-between w-full">
                   <button 
                     onClick={togglePlay}
-                    className="flex items-center justify-center w-14 h-14 rounded-full bg-zinc-800 hover:bg-zinc-700 text-white shadow-lg transition-all active:scale-95"
+                    className="flex items-center justify-center w-14 h-14 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-900 shadow-lg transition-all active:scale-95"
                   >
                     {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-1" />}
                   </button>
@@ -1507,8 +1514,8 @@ export default function App() {
                     <select 
                       value={exportFormat} 
                       onChange={(e) => setExportFormat(e.target.value as any)}
-                      className="h-14 px-4 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      disabled={isRecording || isExporting}
+                      className="h-14 px-4 rounded-xl bg-zinc-100 border border-zinc-300 text-zinc-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      disabled={isExporting}
                     >
                       <option value="webm">{t.webmDesc}</option>
                       <option value="mp4">{t.mp4Desc}</option>
@@ -1518,16 +1525,16 @@ export default function App() {
                     </select>
 
                     <button 
-                      onClick={startRecording}
-                      disabled={isRecording || isExporting}
+                      onClick={exportVideoOffline}
+                      disabled={isExporting}
                       className={`flex items-center justify-center px-6 h-14 rounded-xl font-medium shadow-lg transition-all active:scale-95 space-x-2
-                        ${(isRecording || isExporting)
+                        ${isExporting
                           ? 'bg-indigo-600/50 text-white/50 cursor-not-allowed' 
                           : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/20'}`}
                     >
                       {isExporting ? <Download className="w-5 h-5 animate-bounce" /> : <Video className="w-5 h-5" />}
                       <span>
-                        {isRecording ? t.recording : isExporting ? `${t.exporting} ${exportProgress}%` : t.exportVideo}
+                        {isExporting ? `${exportStatus} ${exportProgress}%` : t.exportVideo}
                       </span>
                     </button>
                   </div>
