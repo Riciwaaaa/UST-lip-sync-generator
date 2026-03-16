@@ -102,8 +102,8 @@ const i18n = {
     override: "覆盖",
     change: "更换",
     noUstLoaded: "请先在左侧导入 UST 文件",
-    ffmpegNotLoaded: "FFmpeg 加载失败 (可能是 COOP/COEP 跨域隔离限制)。目前只能导出 WebM 格式。",
-    ffmpegNotLoadedAlert: "FFmpeg 未加载，无法转换格式。将直接下载 WebM。",
+    ffmpegNotLoaded: "FFmpeg 加载失败。请检查网络连接或刷新重试。",
+    ffmpegNotLoadedAlert: "FFmpeg 未加载，无法导出视频。请检查网络连接或刷新重试。",
     conversionFailed: "转换失败: ",
     gifParseFailed: "GIF 解析失败",
     parseError: "解析文件时发生错误，请检查文件格式。",
@@ -166,8 +166,8 @@ const i18n = {
     override: "Override",
     change: "Change",
     noUstLoaded: "Please import a UST file on the left first",
-    ffmpegNotLoaded: "FFmpeg load failed (possibly due to COOP/COEP). Only WebM export is available.",
-    ffmpegNotLoadedAlert: "FFmpeg not loaded. Will download WebM directly.",
+    ffmpegNotLoaded: "FFmpeg load failed. Please check your network or refresh.",
+    ffmpegNotLoadedAlert: "FFmpeg not loaded. Cannot export video. Please check your network or refresh.",
     conversionFailed: "Conversion failed: ",
     gifParseFailed: "Failed to parse GIF",
     parseError: "Error parsing file, please check the format.",
@@ -230,8 +230,8 @@ const i18n = {
     override: "上書き",
     change: "変更",
     noUstLoaded: "先に左側でUSTファイルをインポートしてください",
-    ffmpegNotLoaded: "FFmpegの読み込みに失敗しました(COOP/COEP制限の可能性)。現在はWebMのみ出力可能です。",
-    ffmpegNotLoadedAlert: "FFmpegが読み込まれていません。WebMを直接ダウンロードします。",
+    ffmpegNotLoaded: "FFmpegの読み込みに失敗しました。ネットワークを確認するか、リロードしてください。",
+    ffmpegNotLoadedAlert: "FFmpegが読み込まれていません。動画を出力できません。ネットワークを確認するか、リロードしてください。",
     conversionFailed: "変換失敗: ",
     gifParseFailed: "GIFの解析に失敗しました",
     parseError: "ファイルの解析中にエラーが発生しました。フォーマットを確認してください。",
@@ -416,10 +416,6 @@ export default function App() {
   // 初始化 FFmpeg
   useEffect(() => {
     const loadFFmpeg = async () => {
-      if (!window.crossOriginIsolated) {
-        setFfmpegError(i18n[language].notIsolatedError);
-        return;
-      }
       try {
         const ffmpeg = ffmpegRef.current;
         ffmpeg.on('progress', ({ progress }) => {
@@ -643,7 +639,7 @@ export default function App() {
   const exportVideoOffline = async () => {
     if (!parsedData) return;
     if (!ffmpegLoaded) {
-      alert(i18n[language].notIsolatedError);
+      alert(i18n[language].ffmpegNotLoadedAlert);
       return;
     }
     
