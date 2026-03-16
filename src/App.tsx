@@ -439,7 +439,7 @@ export default function App() {
     loadFFmpeg();
   }, [language]);
 
-  const drawCanvas = (mouth: MouthShape, time: number = currentTime, lyric: string = '') => {
+  const drawCanvas = (mouth: MouthShape, time: number = currentTime, lyric: string = '', fillWhiteBackground: boolean = false) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -447,6 +447,11 @@ export default function App() {
 
     // 核心：必须清空画布以支持透明通道
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    if (fillWhiteBackground) {
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
 
     // 绘制背景图层 (如果有)
     const gifFrames = bgGifFramesRef.current;
@@ -667,6 +672,10 @@ export default function App() {
 
     try {
       // 1. Render frames
+      let frameExt = '';
+      const isTransparent = exportFormat === 'webm' || exportFormat === 'gif';
+      const mimeType = isTransparent ? 'image/webp' : 'image/jpeg';
+      
       for (let i = 0; i < totalFrames; i++) {
         const timeMs = (i / fps) * 1000;
         
@@ -688,12 +697,15 @@ export default function App() {
         const mouth = activeNote ? getMouthShape(activeNote.cleanedLyric) : 'default';
         const lyric = activeNote ? activeNote.cleanedLyric : '';
         
-        drawCanvas(mouth, timeMs, lyric);
+        drawCanvas(mouth, timeMs, lyric, !isTransparent);
         
-        const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
+        const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, mimeType, 0.8));
         if (blob) {
+          if (!frameExt) {
+            frameExt = blob.type === 'image/webp' ? 'webp' : blob.type === 'image/jpeg' ? 'jpg' : 'png';
+          }
           const buffer = await blob.arrayBuffer();
-          const frameName = `frame_${i.toString().padStart(5, '0')}.png`;
+          const frameName = `frame_${i.toString().padStart(5, '0')}.${frameExt}`;
           await ffmpeg.writeFile(frameName, new Uint8Array(buffer));
         }
         
@@ -720,7 +732,7 @@ export default function App() {
       if (audioOffset > 0) {
         ffmpegArgs.push('-itsoffset', (audioOffset / 1000).toString());
       }
-      ffmpegArgs.push('-framerate', `${fps}`, '-i', 'frame_%05d.png');
+      ffmpegArgs.push('-framerate', `${fps}`, '-i', `frame_%05d.${frameExt}`);
 
       if (hasAudio) {
         if (audioOffset < 0) {
@@ -751,13 +763,13 @@ export default function App() {
       const fileData = await ffmpeg.readFile(outputName);
       const data = new Uint8Array(fileData as ArrayBuffer);
       
-      const mimeType = exportFormat === 'webm' ? 'video/webm' : 
+      const outputMimeType = exportFormat === 'webm' ? 'video/webm' : 
                        exportFormat === 'mp4' ? 'video/mp4' : 
                        exportFormat === 'mov' ? 'video/quicktime' : 
                        exportFormat === 'mkv' ? 'video/x-matroska' : 'image/gif';
                        
-      const blob = new Blob([data.buffer], { type: mimeType });
-      const url = URL.createObjectURL(blob);
+      const blobOutput = new Blob([data.buffer], { type: outputMimeType });
+      const url = URL.createObjectURL(blobOutput);
       const a = document.createElement('a');
       a.href = url;
       a.download = `lipsync_${Date.now()}.${exportFormat}`;
@@ -766,7 +778,7 @@ export default function App() {
 
       // Cleanup
       for (let i = 0; i < totalFrames; i++) {
-        const frameName = `frame_${i.toString().padStart(5, '0')}.png`;
+        const frameName = `frame_${i.toString().padStart(5, '0')}.${frameExt}`;
         try { await ffmpeg.deleteFile(frameName); } catch (e) {}
       }
       if (hasAudio) {
