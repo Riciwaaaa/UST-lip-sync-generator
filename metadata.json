@@ -1,0 +1,5 @@
+{
+  "name": "UST Lip Sync Generator",
+  "description": "A web tool that generates lip sync videos according to UST files.",
+  "requestFramePermissions": []
+}
