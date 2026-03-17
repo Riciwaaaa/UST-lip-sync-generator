@@ -274,6 +274,68 @@ const getMouthShapeConfigs = (t: any): { id: MouthShape; label: string; color: s
   { id: 'default', label: t.mouthDefault, color: 'text-zinc-700', bg: 'bg-zinc-200/50 border-zinc-300 hover:bg-zinc-200/70', canvasBg: 'rgba(63, 63, 70, 0.5)', canvasColor: 'rgba(212, 212, 216, 0.5)' },
 ];
 
+export interface GifFrame {
+  canvas: HTMLCanvasElement;
+  delay: number;
+}
+
+const parseGifFile = async (file: File): Promise<GifFrame[]> => {
+  const buffer = await file.arrayBuffer();
+  const gif = parseGIF(buffer);
+  const frames = decompressFrames(gif, true);
+  
+  const width = gif.lsd.width;
+  const height = gif.lsd.height;
+  
+  const tempCanvas = document.createElement('canvas');
+  tempCanvas.width = width;
+  tempCanvas.height = height;
+  const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+  if (!tempCtx) throw new Error("Could not get 2d context");
+  
+  let gifCanvasData: GifFrame[] = [];
+  let previousImageData: ImageData | null = null;
+  
+  for (let i = 0; i < frames.length; i++) {
+    const frame = frames[i];
+    const dims = frame.dims;
+    
+    if (frame.disposalType === 3) {
+      previousImageData = tempCtx.getImageData(0, 0, width, height);
+    }
+    
+    const patchData = new ImageData(
+      new Uint8ClampedArray(frame.patch),
+      dims.width,
+      dims.height
+    );
+    
+    const patchCanvas = document.createElement('canvas');
+    patchCanvas.width = dims.width;
+    patchCanvas.height = dims.height;
+    patchCanvas.getContext('2d')!.putImageData(patchData, 0, 0);
+    
+    tempCtx.drawImage(patchCanvas, dims.left, dims.top);
+    
+    const frameCanvas = document.createElement('canvas');
+    frameCanvas.width = width;
+    frameCanvas.height = height;
+    frameCanvas.getContext('2d')!.drawImage(tempCanvas, 0, 0);
+    
+    gifCanvasData.push({
+      canvas: frameCanvas,
+      delay: Math.max(frame.delay, 20)
+    });
+    
+    if (frame.disposalType === 2) {
+      tempCtx.clearRect(dims.left, dims.top, dims.width, dims.height);
+    } else if (frame.disposalType === 3 && previousImageData) {
+      tempCtx.putImageData(previousImageData, 0, 0);
+    }
+  }
+  return gifCanvasData;
+};
+
 export default function App() {
   const [language, setLanguage] = useState<Language>('zh');
   const [showModal, setShowModal] = useState(false);
@@ -303,11 +365,13 @@ export default function App() {
   // 播放器与画布状态
   const [mouthImages, setMouthImages] = useState<Record<MouthShape, string>>({ a: '', i: '', u: '', e: '', o: '', default: '' });
   const mouthImageElementsRef = useRef<Record<MouthShape, HTMLImageElement | null>>({ a: null, i: null, u: null, e: null, o: null, default: null });
+  const mouthGifFramesRef = useRef<Record<MouthShape, GifFrame[] | null>>({ a: null, i: null, u: null, e: null, o: null, default: null });
   
   // 新增：单字特例覆盖状态
   const [uniqueLyrics, setUniqueLyrics] = useState<string[]>([]);
   const [overrideImages, setOverrideImages] = useState<Record<string, string>>({});
   const overrideImageElementsRef = useRef<Record<string, HTMLImageElement | null>>({});
+  const overrideGifFramesRef = useRef<Record<string, GifFrame[] | null>>({});
 
   const [canvasSize, setCanvasSize] = useState({ width: 512, height: 512 });
   const isFirstImageRef = useRef(true);
@@ -333,10 +397,6 @@ export default function App() {
   const bgImageElementRef = useRef<HTMLImageElement | null>(null);
   
   // GIF 背景状态
-  interface GifFrame {
-    canvas: HTMLCanvasElement;
-    delay: number;
-  }
   const [bgGifFrames, setBgGifFrames] = useState<GifFrame[] | null>(null);
   const bgGifFramesRef = useRef<GifFrame[] | null>(null);
   
@@ -388,6 +448,14 @@ export default function App() {
         hasMouthImage = true;
         maxWidth = Math.max(maxWidth, (img as HTMLImageElement).naturalWidth);
         maxHeight = Math.max(maxHeight, (img as HTMLImageElement).naturalHeight);
+      }
+    });
+
+    Object.values(mouthGifFramesRef.current).forEach((frames) => {
+      if (frames && frames.length > 0) {
+        hasMouthImage = true;
+        maxWidth = Math.max(maxWidth, frames[0].canvas.width);
+        maxHeight = Math.max(maxHeight, frames[0].canvas.height);
       }
     });
 
@@ -489,12 +557,55 @@ export default function App() {
     }
 
     // 决定渲染哪张嘴型图：优先 Override，其次 Base，最后 Default
-    let imgToDraw: HTMLImageElement | null = null;
+    let imgToDraw: HTMLImageElement | HTMLCanvasElement | null = null;
     
-    if (lyric && overrideImageElementsRef.current[lyric]) {
+    const getGifFrame = (gifFrames: GifFrame[] | null, time: number) => {
+      if (!gifFrames || gifFrames.length === 0) return null;
+      let totalDuration = gifFrames.reduce((acc, f) => acc + f.delay, 0);
+      if (totalDuration <= 0) return gifFrames[0].canvas;
+      let timeInLoop = time % totalDuration;
+      let currentFrame = gifFrames[0].canvas;
+      let accTime = 0;
+      for (const frame of gifFrames) {
+        accTime += frame.delay;
+        if (timeInLoop < accTime) {
+          currentFrame = frame.canvas;
+          break;
+        }
+      }
+      return currentFrame;
+    };
+
+    // 计算当前嘴型的局部时间 (localTime)，使得 GIF 每次出现都从头播放
+    let localTime = time;
+    const parsedData = parsedDataRef.current;
+    if (parsedData) {
+      const activeNote = parsedData.notes.find(n => time >= n.startTime && time < n.startTime + n.duration);
+      if (activeNote) {
+        localTime = time - activeNote.startTime;
+      } else {
+        let prevNoteEndTime = 0;
+        for (let i = parsedData.notes.length - 1; i >= 0; i--) {
+          const noteEnd = parsedData.notes[i].startTime + parsedData.notes[i].duration;
+          if (noteEnd <= time) {
+            prevNoteEndTime = noteEnd;
+            break;
+          }
+        }
+        localTime = time - prevNoteEndTime;
+      }
+    }
+
+    if (lyric && overrideGifFramesRef.current[lyric]) {
+      imgToDraw = getGifFrame(overrideGifFramesRef.current[lyric], localTime);
+    } else if (lyric && overrideImageElementsRef.current[lyric]) {
       imgToDraw = overrideImageElementsRef.current[lyric];
+    } else if (mouthGifFramesRef.current[mouth]) {
+      imgToDraw = getGifFrame(mouthGifFramesRef.current[mouth], localTime);
     } else if (mouthImageElementsRef.current[mouth]) {
       imgToDraw = mouthImageElementsRef.current[mouth];
+    } else if (mouthGifFramesRef.current['default']) {
+      imgToDraw = getGifFrame(mouthGifFramesRef.current['default'], localTime);
     } else if (mouthImageElementsRef.current['default']) {
       imgToDraw = mouthImageElementsRef.current['default'];
     }
@@ -1142,14 +1253,34 @@ export default function App() {
     reader.readAsText(file, 'Shift_JIS');
   };
 
-  const handleMouthImageUpload = (shape: MouthShape, e: ChangeEvent<HTMLInputElement>) => {
+  const handleMouthImageUpload = async (shape: MouthShape, e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
+    if (!file) return;
+
+    if (file.type === 'image/gif') {
+      try {
+        const gifFrames = await parseGifFile(file);
+        mouthGifFramesRef.current[shape] = gifFrames;
+        mouthImageElementsRef.current[shape] = null; // Clear static image
+        
+        setMouthImages(prev => {
+          if (prev[shape]) revokeTrackedURL(prev[shape]);
+          return { ...prev, [shape]: createTrackedURL(file) };
+        });
+        
+        const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTime && currentTime < n.startTime + n.duration);
+        drawCanvas(currentMouth, currentTime, currentNote ? currentNote.cleanedLyric : '');
+      } catch (err) {
+        console.error("Failed to parse mouth GIF:", err);
+        alert(t.gifParseFailed || "Failed to parse GIF");
+      }
+    } else {
       const url = createTrackedURL(file);
       const img = new Image();
       
       img.onload = () => {
         mouthImageElementsRef.current[shape] = img;
+        mouthGifFramesRef.current[shape] = null; // Clear GIF frames
         setMouthImages(prev => {
           if (prev[shape]) revokeTrackedURL(prev[shape]);
           return { ...prev, [shape]: url };
@@ -1159,14 +1290,34 @@ export default function App() {
     }
   };
 
-  const handleOverrideImageUpload = (lyric: string, e: ChangeEvent<HTMLInputElement>) => {
+  const handleOverrideImageUpload = async (lyric: string, e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
+    if (!file) return;
+
+    if (file.type === 'image/gif') {
+      try {
+        const gifFrames = await parseGifFile(file);
+        overrideGifFramesRef.current[lyric] = gifFrames;
+        overrideImageElementsRef.current[lyric] = null; // Clear static image
+        
+        setOverrideImages(prev => {
+          if (prev[lyric]) revokeTrackedURL(prev[lyric]);
+          return { ...prev, [lyric]: createTrackedURL(file) };
+        });
+        
+        const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTime && currentTime < n.startTime + n.duration);
+        drawCanvas(currentMouth, currentTime, currentNote ? currentNote.cleanedLyric : '');
+      } catch (err) {
+        console.error("Failed to parse override GIF:", err);
+        alert(t.gifParseFailed || "Failed to parse GIF");
+      }
+    } else {
       const url = createTrackedURL(file);
       const img = new Image();
       
       img.onload = () => {
         overrideImageElementsRef.current[lyric] = img;
+        overrideGifFramesRef.current[lyric] = null; // Clear GIF frames
         setOverrideImages(prev => {
           if (prev[lyric]) revokeTrackedURL(prev[lyric]);
           return { ...prev, [lyric]: url };
@@ -1178,6 +1329,7 @@ export default function App() {
 
   const removeOverrideImage = (lyric: string) => {
     overrideImageElementsRef.current[lyric] = null;
+    overrideGifFramesRef.current[lyric] = null;
     setOverrideImages(prev => {
       const newState = { ...prev };
       if (newState[lyric]) revokeTrackedURL(newState[lyric]);
