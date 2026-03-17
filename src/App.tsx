@@ -565,38 +565,38 @@ export default function App() {
     // 核心：必须清空画布以支持透明通道
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 如果不是透明导出，则可以绘制背景
+    // 纯色垫底：仅在非透明导出且设置了背景色时绘制
     if (!isExportingTransparent) {
       const bgColor = backgroundColorRef.current;
       if (bgColor && bgColor !== 'transparent') {
         ctx.fillStyle = bgColor;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
+    }
 
-      // 绘制背景图层 (如果有)
-      const gifFrames = bgGifFramesRef.current;
-      if (gifFrames && gifFrames.length > 0) {
-        // Calculate which frame to show based on time
-        let totalDuration = gifFrames.reduce((acc, f) => acc + f.delay, 0);
-        if (totalDuration > 0) {
-          let timeInLoop = time % totalDuration;
-          let currentFrame = gifFrames[0].canvas;
-          
-          let accTime = 0;
-          for (const frame of gifFrames) {
-            accTime += frame.delay;
-            if (timeInLoop < accTime) {
-              currentFrame = frame.canvas;
-              break;
-            }
+    // 绘制用户背景图层 (如果有)，始终执行
+    const gifFrames = bgGifFramesRef.current;
+    if (gifFrames && gifFrames.length > 0) {
+      // Calculate which frame to show based on time
+      let totalDuration = gifFrames.reduce((acc, f) => acc + f.delay, 0);
+      if (totalDuration > 0) {
+        let timeInLoop = time % totalDuration;
+        let currentFrame = gifFrames[0].canvas;
+        
+        let accTime = 0;
+        for (const frame of gifFrames) {
+          accTime += frame.delay;
+          if (timeInLoop < accTime) {
+            currentFrame = frame.canvas;
+            break;
           }
-          drawStretchedImage(ctx, currentFrame, canvas.width, canvas.height);
         }
-      } else {
-        const bgImg = bgImageElementRef.current;
-        if (bgImg) {
-          drawStretchedImage(ctx, bgImg, canvas.width, canvas.height);
-        }
+        drawStretchedImage(ctx, currentFrame, canvas.width, canvas.height);
+      }
+    } else {
+      const bgImg = bgImageElementRef.current;
+      if (bgImg) {
+        drawStretchedImage(ctx, bgImg, canvas.width, canvas.height);
       }
     }
 
