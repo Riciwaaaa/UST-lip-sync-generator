@@ -92,6 +92,7 @@ const i18n = {
     recording: "录制中...",
     exportVideo: "导出视频",
     webmWarning: "提示：WebM 透明格式将采用【实时录制】方案以防止内存溢出。导出期间请勿切换标签页或最小化浏览器。",
+    webmGifWarning: "注意：当背景为 GIF 格式时，导出 WebM 可能无法保留透明通道。如需透明背景，建议使用静态图片背景或导出 GIF 格式。",
     recordingWebM: "正在实时录制画面...",
     muxingAudio: "正在合成音频...",
     play: "播放",
@@ -160,6 +161,7 @@ const i18n = {
     recording: "Recording...",
     exportVideo: "Export Video",
     webmWarning: "Note: WebM format uses real-time recording to prevent memory issues. Please do not switch tabs or minimize the browser during export.",
+    webmGifWarning: "Note: When the background is a GIF, exporting to WebM may not preserve the transparent channel. For a transparent background, it's recommended to use a static image background or export as GIF.",
     recordingWebM: "Recording real-time...",
     muxingAudio: "Muxing audio...",
     play: "Play",
@@ -228,6 +230,7 @@ const i18n = {
     recording: "録画中...",
     exportVideo: "動画を出力",
     webmWarning: "注：WebM形式はメモリ不足を防ぐためリアルタイム録画を使用します。エクスポート中はタブを切り替えたり、ブラウザを最小化したりしないでください。",
+    webmGifWarning: "注意：背景がGIF形式の場合、WebMにエクスポートすると透明チャンネルが保持されない場合があります。透明な背景が必要な場合は、静止画像を使用するか、GIF形式でエクスポートすることをお勧めします。",
     recordingWebM: "リアルタイム録画中...",
     muxingAudio: "音声を合成中...",
     play: "再生",
@@ -2177,6 +2180,12 @@ export default function App() {
                 {exportFormat === 'webm' && (
                   <div className="text-xs text-amber-600/80 text-center mt-2 bg-amber-50 p-2 rounded-lg">
                     {t.webmWarning}
+                  </div>
+                )}
+
+                {exportFormat === 'webm' && bgGifFrames && (
+                  <div className="text-xs text-red-600/80 text-center mt-2 bg-red-50 p-2 rounded-lg">
+                    {t.webmGifWarning}
                   </div>
                 )}
                 
