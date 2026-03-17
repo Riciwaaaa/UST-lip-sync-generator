@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect, DragEvent, ChangeEvent } from 'react';
-import { UploadCloud, FileText, AlertCircle, Clock, Music, Play, Pause, Image as ImageIcon, Video, Download, Settings, Layers } from 'lucide-react';
+import { UploadCloud, FileText, AlertCircle, Clock, Music, Play, Pause, Image as ImageIcon, Video, Download, Settings, Layers, X, Globe } from 'lucide-react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 import coreURL from '@ffmpeg/core?url';
 import wasmURL from '@ffmpeg/core/wasm?url';
 import { parseGIF, decompressFrames } from 'gifuct-js';
+import { DragDropWrapper } from './components/DragDropWrapper';
 
 interface NoteData {
   index: string;
@@ -78,13 +79,14 @@ const i18n = {
     uploadAudio: "导入音频 (可选)",
     audioUploaded: "已导入音频",
     uploadAudioDesc: "同步播放与导出",
-    uploadBg: "导入背景/绿幕 (可选)",
+    uploadBg: "导入背景图/视频 (可选)",
     bgUploaded: "已导入背景",
+    solidBg: "纯色背景",
     uploadBgDesc: "底层图层",
     customSize: "自定义画布尺寸",
     width: "画布宽度",
     height: "画布高度",
-    audioOffset: "延时补正 (ms)",
+    audioOffset: "延时补正 (s)",
     exportFormat: "导出格式",
     exporting: "转换中",
     recording: "录制中...",
@@ -147,11 +149,12 @@ const i18n = {
     uploadAudioDesc: "Sync playback & export",
     uploadBg: "Import Background (Optional)",
     bgUploaded: "Background Imported",
+    solidBg: "Solid Background",
     uploadBgDesc: "Bottom layer",
     customSize: "Custom Canvas Size",
     width: "Canvas Width",
     height: "Canvas Height",
-    audioOffset: "Audio Offset (ms)",
+    audioOffset: "Audio Offset (s)",
     exportFormat: "Export Format",
     exporting: "Converting",
     recording: "Recording...",
@@ -214,11 +217,12 @@ const i18n = {
     uploadAudioDesc: "同期再生と出力",
     uploadBg: "背景をインポート (任意)",
     bgUploaded: "背景インポート済み",
+    solidBg: "単色背景",
     uploadBgDesc: "最背面レイヤー",
     customSize: "キャンバスサイズ",
     width: "幅",
     height: "高さ",
-    audioOffset: "音声オフセット (ms)",
+    audioOffset: "音声オフセット (s)",
     exportFormat: "出力形式",
     exporting: "変換中",
     recording: "録画中...",
@@ -354,14 +358,14 @@ export default function App() {
   const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
-    const hasVisited = localStorage.getItem('hasVisited');
-    if (!hasVisited) {
+    const hasSeenNotice = localStorage.getItem('hasSeenNotice');
+    if (!hasSeenNotice || hasSeenNotice === 'false') {
       setShowModal(true);
+      localStorage.setItem('hasSeenNotice', 'true');
     }
   }, []);
 
   const handleCloseModal = () => {
-    localStorage.setItem('hasVisited', 'true');
     setShowModal(false);
   };
 
@@ -371,7 +375,6 @@ export default function App() {
   const [parsedData, setParsedData] = useState<ParsedUst | null>(null);
   const parsedDataRef = useRef<ParsedUst | null>(null);
   const [fileName, setFileName] = useState<string>('');
-  const [isDragging, setIsDragging] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -413,6 +416,10 @@ export default function App() {
   const [bgGifFrames, setBgGifFrames] = useState<GifFrame[] | null>(null);
   const bgGifFramesRef = useRef<GifFrame[] | null>(null);
   
+  // 新增：纯色背景状态
+  const [backgroundColor, setBackgroundColor] = useState<string | null>(null);
+  const backgroundColorRef = useRef<string | null>(null);
+  
   // 新增：自定义宽高和音频偏移
   const [customWidth, setCustomWidth] = useState<string>('');
   const [customHeight, setCustomHeight] = useState<string>('');
@@ -438,6 +445,10 @@ export default function App() {
   useEffect(() => {
     audioOffsetRef.current = audioOffset;
   }, [audioOffset]);
+
+  useEffect(() => {
+    backgroundColorRef.current = backgroundColor;
+  }, [backgroundColor]);
 
   const calculateCanvasSize = () => {
     if (customWidth && customHeight && !isNaN(Number(customWidth)) && !isNaN(Number(customHeight))) {
@@ -545,7 +556,7 @@ export default function App() {
     loadFFmpeg();
   }, [language]);
 
-  const drawCanvas = (mouth: MouthShape, time: number = currentTime, lyric: string = '', fillWhiteBackground: boolean = false) => {
+  const drawCanvas = (mouth: MouthShape, time: number = currentTime, lyric: string = '', isExportingTransparent: boolean = false) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -553,35 +564,39 @@ export default function App() {
 
     // 核心：必须清空画布以支持透明通道
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    if (fillWhiteBackground) {
-      ctx.fillStyle = 'white';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    }
 
-    // 绘制背景图层 (如果有)
-    const gifFrames = bgGifFramesRef.current;
-    if (gifFrames && gifFrames.length > 0) {
-      // Calculate which frame to show based on time
-      let totalDuration = gifFrames.reduce((acc, f) => acc + f.delay, 0);
-      if (totalDuration > 0) {
-        let timeInLoop = time % totalDuration;
-        let currentFrame = gifFrames[0].canvas;
-        
-        let accTime = 0;
-        for (const frame of gifFrames) {
-          accTime += frame.delay;
-          if (timeInLoop < accTime) {
-            currentFrame = frame.canvas;
-            break;
-          }
-        }
-        drawStretchedImage(ctx, currentFrame, canvas.width, canvas.height);
+    // 如果不是透明导出，则可以绘制背景
+    if (!isExportingTransparent) {
+      const bgColor = backgroundColorRef.current;
+      if (bgColor && bgColor !== 'transparent') {
+        ctx.fillStyle = bgColor;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
-    } else {
-      const bgImg = bgImageElementRef.current;
-      if (bgImg) {
-        drawStretchedImage(ctx, bgImg, canvas.width, canvas.height);
+
+      // 绘制背景图层 (如果有)
+      const gifFrames = bgGifFramesRef.current;
+      if (gifFrames && gifFrames.length > 0) {
+        // Calculate which frame to show based on time
+        let totalDuration = gifFrames.reduce((acc, f) => acc + f.delay, 0);
+        if (totalDuration > 0) {
+          let timeInLoop = time % totalDuration;
+          let currentFrame = gifFrames[0].canvas;
+          
+          let accTime = 0;
+          for (const frame of gifFrames) {
+            accTime += frame.delay;
+            if (timeInLoop < accTime) {
+              currentFrame = frame.canvas;
+              break;
+            }
+          }
+          drawStretchedImage(ctx, currentFrame, canvas.width, canvas.height);
+        }
+      } else {
+        const bgImg = bgImageElementRef.current;
+        if (bgImg) {
+          drawStretchedImage(ctx, bgImg, canvas.width, canvas.height);
+        }
       }
     }
 
@@ -663,7 +678,7 @@ export default function App() {
       const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTime && currentTime < n.startTime + n.duration);
       drawCanvas(currentMouth, currentTime, currentNote ? currentNote.cleanedLyric : '');
     }
-  }, [canvasSize, currentMouth, isPlaying, currentTime]);
+  }, [canvasSize, currentMouth, isPlaying, currentTime, mouthImages, overrideImages]);
 
   const updateFrame = () => {
     const data = parsedDataRef.current;
@@ -671,7 +686,7 @@ export default function App() {
 
     let newTime = 0;
     if (audioRef.current && audioUrl) {
-      newTime = (audioRef.current.currentTime * 1000) - audioOffsetRef.current;
+      newTime = (audioRef.current.currentTime * 1000) - (audioOffsetRef.current * 1000);
     } else {
       const now = performance.now();
       newTime = now - startTimeRef.current;
@@ -715,7 +730,8 @@ export default function App() {
     const mouth = activeNote ? getMouthShape(activeNote.cleanedLyric) : 'default';
     const lyric = activeNote ? activeNote.cleanedLyric : '';
     setCurrentMouth(mouth);
-    drawCanvas(mouth, newTime, lyric);
+    const isTransparent = isExportingRef.current && (exportFormat === 'webm' || exportFormat === 'gif');
+    drawCanvas(mouth, newTime, lyric, isTransparent);
 
     if (isPlayingRef.current) {
       reqRef.current = requestAnimationFrame(updateFrame);
@@ -735,7 +751,7 @@ export default function App() {
       isPlayingRef.current = true;
       
       if (audioRef.current && audioUrl) {
-        const targetAudioTime = (currentTime + audioOffsetRef.current) / 1000;
+        const targetAudioTime = (currentTime / 1000) + audioOffsetRef.current;
         audioRef.current.currentTime = Math.max(0, targetAudioTime);
         audioRef.current.play().catch(e => console.error("Audio play failed:", e));
       } else {
@@ -752,7 +768,7 @@ export default function App() {
     setCurrentTime(time);
     
     if (audioRef.current && audioUrl) {
-      const targetAudioTime = (time + audioOffsetRef.current) / 1000;
+      const targetAudioTime = (time / 1000) + audioOffsetRef.current;
       audioRef.current.currentTime = Math.max(0, targetAudioTime);
     }
     
@@ -790,10 +806,16 @@ export default function App() {
 
   const renderOffline = async () => {
     if (!parsedDataRef.current) return;
+    if (isPlaying) togglePlay();
     setIsExporting(true);
     isExportingRef.current = true;
     setExportStatus(t.recordingWebM || 'Exporting...');
     setExportProgress(0);
+
+    let totalFrames = 0;
+    const isTransparent = exportFormat === 'gif';
+    const mimeType = isTransparent ? 'image/png' : 'image/jpeg';
+    const frameExt = isTransparent ? 'png' : 'jpg';
 
     try {
       const ffmpeg = ffmpegRef.current;
@@ -805,7 +827,7 @@ export default function App() {
       if (totalDuration === 0) throw new Error("No notes to export");
 
       const fps = exportFormat === 'gif' ? 15 : 30;
-      const totalFrames = Math.ceil((totalDuration / 1000) * fps);
+      totalFrames = Math.ceil((totalDuration / 1000) * fps);
       
       const targetCanvas = document.createElement('canvas');
       const MAX_EXPORT_DIMENSION = exportFormat === 'gif' ? 512 : 1280;
@@ -820,11 +842,8 @@ export default function App() {
       const targetCtx = targetCanvas.getContext('2d');
       if (!targetCtx) throw new Error("Could not get 2d context for export");
 
-      const mimeType = 'image/jpeg';
-      const frameExt = 'jpg';
-
       const startTime = performance.now();
-      const SEGMENT_SIZE = 600; // 20 seconds at 30fps
+      const SEGMENT_SIZE = isTransparent ? totalFrames : 600; // Do not segment GIF to preserve transparency easily
       const segmentFiles: string[] = [];
 
       for (let segStart = 0; segStart < totalFrames; segStart += SEGMENT_SIZE) {
@@ -844,11 +863,13 @@ export default function App() {
             lyric = activeNote.cleanedLyric;
           }
 
-          drawCanvas(mouth, timeMs, lyric, true); // Fill white background for JPEG
+          drawCanvas(mouth, timeMs, lyric, isTransparent); // Skip background if transparent
           
           targetCtx.clearRect(0, 0, targetCanvas.width, targetCanvas.height);
-          targetCtx.fillStyle = 'white';
-          targetCtx.fillRect(0, 0, targetCanvas.width, targetCanvas.height);
+          if (!isTransparent) {
+            targetCtx.fillStyle = 'white';
+            targetCtx.fillRect(0, 0, targetCanvas.width, targetCanvas.height);
+          }
           if (canvasRef.current) {
             targetCtx.drawImage(canvasRef.current, 0, 0, targetCanvas.width, targetCanvas.height);
           }
@@ -856,7 +877,7 @@ export default function App() {
           const blob = await new Promise<Blob | null>(resolve => targetCanvas.toBlob(resolve, mimeType, 0.8));
           if (blob) {
             const buffer = await blob.arrayBuffer();
-            const frameIndex = i - segStart;
+            const frameIndex = isTransparent ? i : i - segStart;
             const frameName = `frame_${frameIndex.toString().padStart(5, '0')}.${frameExt}`;
             await ffmpeg.writeFile(frameName, new Uint8Array(buffer));
           }
@@ -876,14 +897,16 @@ export default function App() {
         }
 
         // Render segment
-        const segmentName = `segment_${segStart}.mp4`;
-        setExportStatus(`[Offline] Encoding segment ${segmentFiles.length + 1}...`);
-        await ffmpeg.exec(['-framerate', fps.toString(), '-i', `frame_%05d.${frameExt}`, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', segmentName]);
-        segmentFiles.push(segmentName);
+        if (!isTransparent) {
+          const segmentName = `segment_${segStart}.mp4`;
+          setExportStatus(`[Offline] Encoding segment ${segmentFiles.length + 1}...`);
+          await ffmpeg.exec(['-framerate', fps.toString(), '-i', `frame_%05d.${frameExt}`, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', segmentName]);
+          segmentFiles.push(segmentName);
 
-        // Cleanup frames for this segment
-        for (let i = 0; i < segFrames; i++) {
-          await ffmpeg.deleteFile(`frame_${i.toString().padStart(5, '0')}.${frameExt}`).catch(() => {});
+          // Cleanup frames for this segment
+          for (let i = 0; i < segFrames; i++) {
+            await ffmpeg.deleteFile(`frame_${i.toString().padStart(5, '0')}.${frameExt}`).catch(() => {});
+          }
         }
       }
 
@@ -891,12 +914,14 @@ export default function App() {
       
       // Concatenate segments
       let finalVideo = 'concatenated.mp4';
-      if (segmentFiles.length === 1) {
-        finalVideo = segmentFiles[0];
-      } else {
-        const concatText = segmentFiles.map(f => `file '${f}'`).join('\n');
-        await ffmpeg.writeFile('concat.txt', concatText);
-        await ffmpeg.exec(['-f', 'concat', '-safe', '0', '-i', 'concat.txt', '-c', 'copy', 'concatenated.mp4']);
+      if (!isTransparent) {
+        if (segmentFiles.length === 1) {
+          finalVideo = segmentFiles[0];
+        } else {
+          const concatText = segmentFiles.map(f => `file '${f}'`).join('\n');
+          await ffmpeg.writeFile('concat.txt', concatText);
+          await ffmpeg.exec(['-f', 'concat', '-safe', '0', '-i', 'concat.txt', '-c', 'copy', 'concatenated.mp4']);
+        }
       }
 
       let hasAudio = false;
@@ -912,12 +937,16 @@ export default function App() {
       
       if (hasAudio) {
         if (audioOffset > 0) {
-          ffmpegArgs.push('-itsoffset', (audioOffset / 1000).toString());
+          ffmpegArgs.push('-itsoffset', audioOffset.toString());
         }
         ffmpegArgs.push('-i', `input_audio.${audioExt}`);
       }
       
-      ffmpegArgs.push('-i', finalVideo);
+      if (!isTransparent) {
+        ffmpegArgs.push('-i', finalVideo);
+      } else {
+        ffmpegArgs.push('-framerate', fps.toString(), '-i', `frame_%05d.${frameExt}`);
+      }
 
       const outputName = `output.${exportFormat}`;
 
@@ -925,7 +954,7 @@ export default function App() {
         ffmpegArgs.push('-c:v', 'copy');
         if (hasAudio) ffmpegArgs.push('-c:a', 'aac', '-b:a', '192k');
       } else if (exportFormat === 'gif') {
-        ffmpegArgs.push('-vf', 'split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse');
+        ffmpegArgs.push('-vf', 'split[s0][s1];[s0]palettegen=reserve_transparent=1[p];[s1][p]paletteuse', '-loop', '0');
       }
 
       ffmpegArgs.push(outputName);
@@ -956,15 +985,16 @@ export default function App() {
       if (isExportingRef.current) {
         const isOOM = String(err).includes('memory access out of bounds') || String(err).includes('RuntimeError');
         setFfmpegError(isOOM ? "Memory limit exceeded! Try a shorter video or smaller resolution." : String(err));
-        
-        try {
-            const ffmpeg = ffmpegRef.current;
-            for (let i = 0; i < 1000; i++) {
-                ffmpeg.deleteFile(`frame_${i.toString().padStart(5, '0')}.jpg`).catch(() => {});
-            }
-        } catch (e) {}
       }
     } finally {
+      // 彻底清理所有帧文件
+      try {
+        const ffmpeg = ffmpegRef.current;
+        for (let i = 0; i < totalFrames; i++) {
+          ffmpeg.deleteFile(`frame_${i.toString().padStart(5, '0')}.${frameExt}`).catch(() => {});
+        }
+      } catch (e) {}
+
       setIsExporting(false);
       isExportingRef.current = false;
       setExportStatus('');
@@ -1000,7 +1030,7 @@ export default function App() {
     if (isPlaying) togglePlay();
     setCurrentTime(0);
     if (audioRef.current) {
-      audioRef.current.currentTime = Math.max(0, audioOffsetRef.current / 1000);
+      audioRef.current.currentTime = Math.max(0, audioOffsetRef.current);
     }
 
     const stream = canvas.captureStream(30);
@@ -1035,7 +1065,7 @@ export default function App() {
     reqRef.current = requestAnimationFrame(updateFrame);
 
     const progressInterval = setInterval(() => {
-      const current = audioRef.current ? audioRef.current.currentTime * 1000 - audioOffsetRef.current : currentTime;
+      const current = audioRef.current ? (audioRef.current.currentTime * 1000) - (audioOffsetRef.current * 1000) : currentTime;
       const progress = Math.min(100, Math.round((current / durationToRecord) * 100));
       setExportProgress(progress);
       setExportStatus(`[Recording WebM] ${progress}%`);
@@ -1086,12 +1116,12 @@ export default function App() {
           await ffmpeg.writeFile(`input_audio.${ext}`, new Uint8Array(audioBuffer));
 
           if (audioOffset > 0) {
-            args.push('-itsoffset', (audioOffset / 1000).toString());
+            args.push('-itsoffset', audioOffset.toString());
           }
           args.push('-i', 'temp_video.webm');
           
           if (audioOffset < 0) {
-            args.push('-itsoffset', (Math.abs(audioOffset) / 1000).toString());
+            args.push('-itsoffset', Math.abs(audioOffset).toString());
           }
           args.push('-i', `input_audio.${ext}`);
         } else {
@@ -1313,8 +1343,116 @@ export default function App() {
     reader.readAsText(file, 'Shift_JIS');
   };
 
-  const handleMouthImageUpload = async (shape: MouthShape, e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleClearMouthImage = (shape: MouthShape, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (mouthImages[shape]) {
+      revokeTrackedURL(mouthImages[shape]);
+    }
+    
+    setMouthImages(prev => ({ ...prev, [shape]: '' }));
+    mouthImageElementsRef.current[shape] = null;
+    mouthGifFramesRef.current[shape] = null;
+  };
+
+  const handleClearOverrideImage = (lyric: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (overrideImages[lyric]) {
+      revokeTrackedURL(overrideImages[lyric]);
+    }
+    
+    setOverrideImages(prev => {
+      const next = { ...prev };
+      delete next[lyric];
+      return next;
+    });
+    overrideImageElementsRef.current[lyric] = null;
+    overrideGifFramesRef.current[lyric] = null;
+  };
+
+  const handleClearUst = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    setParsedData(null);
+    parsedDataRef.current = null;
+    setFileName('');
+    setUniqueLyrics([]);
+    
+    // Clear override images since they depend on the lyrics
+    Object.values(overrideImages).forEach(url => revokeTrackedURL(url as string));
+    setOverrideImages({});
+    overrideImageElementsRef.current = {};
+    overrideGifFramesRef.current = {};
+    
+    // Reset player state
+    setIsPlaying(false);
+    isPlayingRef.current = false;
+    setCurrentTime(0);
+    setCurrentMouth('default');
+    
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleClearAudio = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (audioUrl) {
+      revokeTrackedURL(audioUrl);
+    }
+    setAudioUrl('');
+    audioFileRef.current = null;
+    
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+  };
+
+  const handleClearBgImage = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (bgImageUrl) {
+      revokeTrackedURL(bgImageUrl);
+    }
+    setBgImageUrl('');
+    bgImageElementRef.current = null;
+    setBgGifFrames(null);
+    bgGifFramesRef.current = null;
+    setBackgroundColor(null);
+    backgroundColorRef.current = null;
+    
+    const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTime && currentTime < n.startTime + n.duration);
+    drawCanvas(currentMouth, currentTime, currentNote ? currentNote.cleanedLyric : '');
+  };
+
+  const handleBackgroundColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const color = e.target.value;
+    setBackgroundColor(color);
+    backgroundColorRef.current = color;
+    
+    // Clear image/gif
+    if (bgImageUrl) {
+      revokeTrackedURL(bgImageUrl);
+    }
+    setBgImageUrl('');
+    bgImageElementRef.current = null;
+    setBgGifFrames(null);
+    bgGifFramesRef.current = null;
+    
+    // Redraw
+    const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTime && currentTime < n.startTime + n.duration);
+    drawCanvas(currentMouth, currentTime, currentNote ? currentNote.cleanedLyric : '');
+  };
+
+  const handleMouthImageUpload = async (shape: MouthShape, file: File) => {
     if (!file) return;
 
     if (file.type === 'image/gif') {
@@ -1350,8 +1488,7 @@ export default function App() {
     }
   };
 
-  const handleOverrideImageUpload = async (lyric: string, e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleOverrideImageUpload = async (lyric: string, file: File) => {
     if (!file) return;
 
     if (file.type === 'image/gif') {
@@ -1387,17 +1524,6 @@ export default function App() {
     }
   };
 
-  const removeOverrideImage = (lyric: string) => {
-    overrideImageElementsRef.current[lyric] = null;
-    overrideGifFramesRef.current[lyric] = null;
-    setOverrideImages(prev => {
-      const newState = { ...prev };
-      if (newState[lyric]) revokeTrackedURL(newState[lyric]);
-      delete newState[lyric];
-      return newState;
-    });
-  };
-
   const handleAudioUpload = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -1413,6 +1539,9 @@ export default function App() {
   const handleBgImageUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    setBackgroundColor(null);
+    backgroundColorRef.current = null;
 
     if (file.type === 'image/gif') {
       try {
@@ -1449,16 +1578,6 @@ export default function App() {
     }
   };
 
-  const onDragOver = (e: DragEvent<HTMLDivElement>) => { e.preventDefault(); setIsDragging(true); };
-  const onDragLeave = (e: DragEvent<HTMLDivElement>) => { e.preventDefault(); setIsDragging(false); };
-  const onDrop = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFile(e.dataTransfer.files[0]);
-    }
-  };
-
   return (
     <div className="flex flex-col h-screen bg-zinc-50 text-zinc-900 font-sans selection:bg-indigo-500/30 overflow-hidden">
       {/* Header */}
@@ -1469,11 +1588,12 @@ export default function App() {
             <span className="font-semibold text-zinc-900">{t.title}</span>
           </div>
           <div className="flex items-center space-x-4">
-            <button onClick={() => setShowModal(true)} className="text-sm text-zinc-600 hover:text-zinc-900 transition-colors">
-              {t.language}
-            </button>
-            <button onClick={() => setShowModal(true)} className="text-sm text-zinc-600 hover:text-zinc-900 transition-colors">
-              {t.notice}
+            <button 
+              onClick={() => setShowModal(true)} 
+              className="p-2 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/50 rounded-full transition-all"
+              title={`${t.language} / ${t.notice}`}
+            >
+              <Globe className="w-5 h-5" />
             </button>
           </div>
         </div>
@@ -1546,28 +1666,49 @@ export default function App() {
           </div>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-4">
             {mouthShapeConfigs.map((config) => (
-              <label key={config.id} className={`
-                relative flex flex-col items-center justify-center aspect-square rounded-2xl border-2 border-dashed cursor-pointer overflow-hidden transition-all
-                ${config.bg}
-              `}>
-                <input 
-                  type="file" 
-                  accept="image/*" 
-                  className="hidden" 
-                  onChange={(e) => handleMouthImageUpload(config.id, e)}
-                />
-                {mouthImages[config.id] ? (
-                  <img src={mouthImages[config.id]} alt={config.label} className="absolute inset-0 w-full h-full object-cover" />
-                ) : (
-                  <div className="flex flex-col items-center space-y-2 z-10">
-                    <UploadCloud className={`w-8 h-8 ${config.color} opacity-70`} />
-                    <span className={`font-medium ${config.color}`}>{config.label}</span>
-                  </div>
+              <DragDropWrapper
+                key={config.id}
+                onDropFile={(file) => handleMouthImageUpload(config.id, file)}
+                accept="image/*"
+                className={(isDragging) => `
+                  relative flex flex-col items-center justify-center aspect-square rounded-2xl border-2 border-dashed cursor-pointer overflow-hidden transition-all
+                  ${config.bg}
+                  ${isDragging ? 'border-emerald-500 bg-emerald-500/10 scale-[1.02]' : ''}
+                `}
+              >
+                {(isDragging) => (
+                  <>
+                    <label className="absolute inset-0 w-full h-full cursor-pointer z-0">
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        onChange={(e) => e.target.files?.[0] && handleMouthImageUpload(config.id, e.target.files[0])}
+                      />
+                    </label>
+                    {mouthImages[config.id] ? (
+                      <>
+                        <img src={mouthImages[config.id]} alt={config.label} className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
+                        <button
+                          onClick={(e) => handleClearMouthImage(config.id, e)}
+                          className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-red-500/80 text-white rounded-full backdrop-blur-sm transition-colors z-20"
+                          title="Clear image"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </>
+                    ) : (
+                      <div className="flex flex-col items-center space-y-2 z-10 pointer-events-none">
+                        <UploadCloud className={`w-8 h-8 ${config.color} opacity-70`} />
+                        <span className={`font-medium ${config.color}`}>{config.label}</span>
+                      </div>
+                    )}
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm p-2 text-center text-xs font-medium text-white/90 translate-y-full hover:translate-y-0 transition-transform z-10 pointer-events-none">
+                      {t.clickToChange}
+                    </div>
+                  </>
                 )}
-                <div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm p-2 text-center text-xs font-medium text-white/90 translate-y-full hover:translate-y-0 transition-transform">
-                  {t.clickToChange}
-                </div>
-              </label>
+              </DragDropWrapper>
             ))}
           </div>
         </section>
@@ -1592,37 +1733,59 @@ export default function App() {
                 const displayImg = hasOverride ? overrideImages[lyric] : mouthImages[baseShape];
                 
                 return (
-                  <label key={lyric} className={`
-                    relative flex flex-col items-center justify-center aspect-square rounded-xl border cursor-pointer overflow-hidden transition-all
-                    ${hasOverride ? 'bg-purple-500/10 border-purple-500/50 hover:border-purple-400' : 'bg-zinc-100/50 border-zinc-300/50 hover:border-zinc-500'}
-                  `}>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => handleOverrideImageUpload(lyric, e)}
-                    />
-                    
-                    {displayImg ? (
-                      <img src={displayImg} alt={lyric} className={`absolute inset-0 w-full h-full object-contain ${!hasOverride ? 'opacity-50 grayscale' : ''}`} />
-                    ) : (
-                      <span className="text-2xl font-bold text-zinc-700">{lyric}</span>
+                  <DragDropWrapper
+                    key={lyric}
+                    onDropFile={(file) => handleOverrideImageUpload(lyric, file)}
+                    accept="image/*"
+                    className={(isDragging) => `
+                      relative flex flex-col items-center justify-center aspect-square rounded-xl border cursor-pointer overflow-hidden transition-all
+                      ${hasOverride ? 'bg-purple-500/10 border-purple-500/50 hover:border-purple-400' : 'bg-zinc-100/50 border-zinc-300/50 hover:border-zinc-500'}
+                      ${isDragging ? 'border-emerald-500 bg-emerald-500/10 scale-[1.02]' : ''}
+                    `}
+                  >
+                    {(isDragging) => (
+                      <>
+                        <label className="absolute inset-0 w-full h-full cursor-pointer z-0">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => e.target.files?.[0] && handleOverrideImageUpload(lyric, e.target.files[0])}
+                          />
+                        </label>
+                        
+                        {displayImg ? (
+                          <img src={displayImg} alt={lyric} className={`absolute inset-0 w-full h-full object-contain pointer-events-none ${!hasOverride ? 'opacity-50 grayscale' : ''}`} />
+                        ) : (
+                          <span className="text-2xl font-bold text-zinc-700 pointer-events-none">{lyric}</span>
+                        )}
+                        
+                        {hasOverride && (
+                          <button
+                            onClick={(e) => handleClearOverrideImage(lyric, e)}
+                            className="absolute top-1 right-1 p-1 bg-black/50 hover:bg-red-500/80 text-white rounded-full backdrop-blur-sm transition-colors z-20"
+                            title="Clear override"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                        
+                        <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-black/60 backdrop-blur text-[10px] font-bold text-white rounded pointer-events-none">
+                          {lyric}
+                        </div>
+                        
+                        {!hasOverride && (
+                          <div className="absolute top-1 right-1 px-1.5 py-0.5 bg-zinc-100/80 backdrop-blur text-[8px] font-mono text-zinc-600 rounded pointer-events-none">
+                            {baseShape}
+                          </div>
+                        )}
+                        
+                        <div className="absolute inset-0 bg-black/60 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center z-10 pointer-events-none">
+                          <span className="text-xs font-medium text-white">{hasOverride ? t.change : t.override}</span>
+                        </div>
+                      </>
                     )}
-                    
-                    <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-black/60 backdrop-blur text-[10px] font-bold text-white rounded">
-                      {lyric}
-                    </div>
-                    
-                    {!hasOverride && (
-                      <div className="absolute top-1 right-1 px-1.5 py-0.5 bg-zinc-100/80 backdrop-blur text-[8px] font-mono text-zinc-600 rounded">
-                        {baseShape}
-                      </div>
-                    )}
-                    
-                    <div className="absolute inset-0 bg-black/60 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <span className="text-xs font-medium text-white">{hasOverride ? t.change : t.override}</span>
-                    </div>
-                  </label>
+                  </DragDropWrapper>
                 );
               })}
             </div>
@@ -1638,12 +1801,11 @@ export default function App() {
           
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
             {/* UST Upload */}
-            <div
-              onDragOver={onDragOver}
-              onDragLeave={onDragLeave}
-              onDrop={onDrop}
+            <DragDropWrapper
+              onDropFile={handleFile}
+              accept=".ust"
               onClick={() => fileInputRef.current?.click()}
-              className={`
+              className={(isDragging) => `
                 relative group cursor-pointer flex flex-col items-center justify-center 
                 w-full h-48 rounded-3xl border-2 border-dashed transition-all duration-300 ease-out
                 ${isDragging 
@@ -1651,55 +1813,178 @@ export default function App() {
                   : 'border-zinc-200 bg-white/50 hover:border-zinc-300 hover:bg-white'}
               `}
             >
-              <input type="file" ref={fileInputRef} onChange={(e) => e.target.files && handleFile(e.target.files[0])} accept=".ust" className="hidden" />
-              <div className="flex flex-col items-center space-y-4 pointer-events-none">
-                <div className={`p-4 rounded-full transition-colors duration-300 ${isDragging ? 'bg-emerald-500/20 text-emerald-600' : 'bg-zinc-100 text-zinc-600 group-hover:bg-zinc-200 group-hover:text-zinc-700'}`}>
-                  <FileText className="w-8 h-8" />
-                </div>
-                <div className="text-center space-y-1">
-                  <p className="text-lg font-medium text-zinc-800">
-                    {fileName ? `${t.selected}${fileName}` : t.uploadUst}
-                  </p>
-                  <p className="text-sm text-zinc-500">{t.uploadUstDesc}</p>
-                </div>
-              </div>
-            </div>
+              {(isDragging) => (
+                <>
+                  <input type="file" ref={fileInputRef} onChange={(e) => e.target.files && handleFile(e.target.files[0])} accept=".ust" className="hidden" />
+                  <div className="flex flex-col items-center space-y-4 pointer-events-none">
+                    <div className={`p-4 rounded-full transition-colors duration-300 ${isDragging ? 'bg-emerald-500/20 text-emerald-600' : 'bg-zinc-100 text-zinc-600 group-hover:bg-zinc-200 group-hover:text-zinc-700'}`}>
+                      <FileText className="w-8 h-8" />
+                    </div>
+                    <div className="text-center space-y-1">
+                      <p className="text-lg font-medium text-zinc-800">
+                        {fileName ? `${t.selected}${fileName}` : t.uploadUst}
+                      </p>
+                      <p className="text-sm text-zinc-500">{t.uploadUstDesc}</p>
+                    </div>
+                  </div>
+                  {fileName && (
+                    <button
+                      onClick={handleClearUst}
+                      className="absolute top-4 right-4 p-2 bg-black/50 hover:bg-red-500/80 text-white rounded-full backdrop-blur-sm transition-colors z-20"
+                      title="Clear UST"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  )}
+                </>
+              )}
+            </DragDropWrapper>
 
             {/* Audio Upload */}
-            <label className="relative group cursor-pointer flex flex-col items-center justify-center w-full h-48 rounded-3xl border-2 border-dashed border-zinc-200 bg-white/50 hover:border-zinc-300 hover:bg-white transition-all duration-300 ease-out">
-              <input type="file" accept="audio/*" onChange={handleAudioUpload} className="hidden" />
-              <div className="flex flex-col items-center space-y-4 pointer-events-none">
-                <div className="p-4 rounded-full bg-zinc-100 text-zinc-600 group-hover:bg-zinc-200 group-hover:text-zinc-700 transition-colors duration-300">
-                  <Music className="w-8 h-8" />
-                </div>
-                <div className="text-center space-y-1">
-                  <p className="text-lg font-medium text-zinc-800">
-                    {audioUrl ? t.audioUploaded : t.uploadAudio}
-                  </p>
-                  <p className="text-sm text-zinc-500">{t.uploadAudioDesc}</p>
-                </div>
-              </div>
-              {audioUrl && <audio ref={audioRef} src={audioUrl} className="hidden" />}
-            </label>
+            <DragDropWrapper
+              onDropFile={(file) => {
+                audioFileRef.current = file;
+                const url = createTrackedURL(file);
+                setAudioUrl(prev => {
+                  if (prev) revokeTrackedURL(prev);
+                  return url;
+                });
+              }}
+              accept="audio/*"
+              className={(isDragging) => `
+                relative group cursor-pointer flex flex-col items-center justify-center 
+                w-full h-48 rounded-3xl border-2 border-dashed transition-all duration-300 ease-out
+                ${isDragging 
+                  ? 'border-emerald-500 bg-emerald-500/10 scale-[1.02]' 
+                  : 'border-zinc-200 bg-white/50 hover:border-zinc-300 hover:bg-white'}
+              `}
+            >
+              {(isDragging) => (
+                <>
+                  <label className="absolute inset-0 w-full h-full cursor-pointer">
+                    <input type="file" accept="audio/*" onChange={handleAudioUpload} className="hidden" />
+                  </label>
+                  <div className="flex flex-col items-center space-y-4 pointer-events-none">
+                    <div className={`p-4 rounded-full transition-colors duration-300 ${isDragging ? 'bg-emerald-500/20 text-emerald-600' : 'bg-zinc-100 text-zinc-600 group-hover:bg-zinc-200 group-hover:text-zinc-700'}`}>
+                      <Music className="w-8 h-8" />
+                    </div>
+                    <div className="text-center space-y-1">
+                      <p className="text-lg font-medium text-zinc-800">
+                        {audioUrl ? t.audioUploaded : t.uploadAudio}
+                      </p>
+                      <p className="text-sm text-zinc-500">{t.uploadAudioDesc}</p>
+                    </div>
+                  </div>
+                  {audioUrl && <audio ref={audioRef} src={audioUrl} className="hidden" />}
+                  {audioUrl && (
+                    <button
+                      onClick={handleClearAudio}
+                      className="absolute top-4 right-4 p-2 bg-black/50 hover:bg-red-500/80 text-white rounded-full backdrop-blur-sm transition-colors z-20"
+                      title="Clear Audio"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  )}
+                </>
+              )}
+            </DragDropWrapper>
 
             {/* Background Upload */}
-            <label className="relative group cursor-pointer flex flex-col items-center justify-center w-full h-48 rounded-3xl border-2 border-dashed border-zinc-200 bg-white/50 hover:border-zinc-300 hover:bg-white transition-all duration-300 ease-out overflow-hidden">
-              <input type="file" accept="image/*" onChange={handleBgImageUpload} className="hidden" />
-              {bgImageUrl ? (
-                <img src={bgImageUrl} alt="Background" className="absolute inset-0 w-full h-full object-cover opacity-50" />
-              ) : null}
-              <div className="flex flex-col items-center space-y-4 z-10 pointer-events-none">
-                <div className="p-4 rounded-full bg-zinc-100 text-zinc-600 group-hover:bg-zinc-200 group-hover:text-zinc-700 transition-colors duration-300">
-                  <Layers className="w-8 h-8" />
-                </div>
-                <div className="text-center space-y-1">
-                  <p className="text-lg font-medium text-zinc-800">
-                    {bgImageUrl ? t.bgUploaded : t.uploadBg}
-                  </p>
-                  <p className="text-sm text-zinc-500">{t.uploadBgDesc}</p>
-                </div>
-              </div>
-            </label>
+            <DragDropWrapper
+              onDropFile={async (file) => {
+                setBackgroundColor(null);
+                backgroundColorRef.current = null;
+                if (file.type === 'image/gif') {
+                  try {
+                    const gifCanvasData = await parseGifFile(file, 1280);
+                    bgGifFramesRef.current = gifCanvasData;
+                    setBgGifFrames(gifCanvasData);
+                    setBgImageUrl(prev => {
+                      if (prev) revokeTrackedURL(prev);
+                      return createTrackedURL(file);
+                    });
+                    bgImageElementRef.current = null;
+                    const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTime && currentTime < n.startTime + n.duration);
+                    drawCanvas(currentMouth, currentTime, currentNote ? currentNote.cleanedLyric : '');
+                  } catch (err) {
+                    console.error('Failed to parse background GIF:', err);
+                    setError(t.errorGif);
+                  }
+                } else {
+                  const url = createTrackedURL(file);
+                  const img = new Image();
+                  img.onload = () => {
+                    bgImageElementRef.current = img;
+                    bgGifFramesRef.current = null;
+                    setBgGifFrames(null);
+                    setBgImageUrl(prev => {
+                      if (prev) revokeTrackedURL(prev);
+                      return url;
+                    });
+                    const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTime && currentTime < n.startTime + n.duration);
+                    drawCanvas(currentMouth, currentTime, currentNote ? currentNote.cleanedLyric : '');
+                  };
+                  img.src = url;
+                }
+              }}
+              accept="image/*"
+              className={(isDragging) => `
+                relative group cursor-pointer flex flex-col items-center justify-center 
+                w-full h-48 rounded-3xl border-2 border-dashed transition-all duration-300 ease-out overflow-hidden
+                ${isDragging 
+                  ? 'border-emerald-500 bg-emerald-500/10 scale-[1.02]' 
+                  : 'border-zinc-200 bg-white/50 hover:border-zinc-300 hover:bg-white'}
+              `}
+            >
+              {(isDragging) => (
+                <>
+                  <label className="absolute inset-0 w-full h-full cursor-pointer z-0">
+                    <input type="file" accept="image/*" onChange={handleBgImageUpload} className="hidden" />
+                  </label>
+                  {bgImageUrl ? (
+                    <img src={bgImageUrl} alt="Background" className="absolute inset-0 w-full h-full object-cover opacity-50 pointer-events-none" />
+                  ) : backgroundColor ? (
+                    <div className="absolute inset-0 w-full h-full opacity-50 pointer-events-none" style={{ backgroundColor }} />
+                  ) : null}
+                  <div className="flex flex-col items-center space-y-4 z-10 pointer-events-none">
+                    <div className={`p-4 rounded-full transition-colors duration-300 ${isDragging ? 'bg-emerald-500/20 text-emerald-600' : 'bg-zinc-100 text-zinc-600 group-hover:bg-zinc-200 group-hover:text-zinc-700'}`}>
+                      <Layers className="w-8 h-8" />
+                    </div>
+                    <div className="text-center space-y-1">
+                      <p className="text-lg font-medium text-zinc-800">
+                        {bgImageUrl ? t.bgUploaded : backgroundColor ? t.solidBg : t.uploadBg}
+                      </p>
+                      <p className="text-sm text-zinc-500">{t.uploadBgDesc}</p>
+                    </div>
+                  </div>
+                  {(bgImageUrl || backgroundColor) && (
+                    <button
+                      onClick={handleClearBgImage}
+                      className="absolute top-4 right-4 p-2 bg-black/50 hover:bg-red-500/80 text-white rounded-full backdrop-blur-sm transition-colors z-20"
+                      title="Clear Background"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  )}
+                  
+                  {/* Color Picker Button */}
+                  <div 
+                    className="absolute bottom-4 right-4 z-20"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <label className="flex items-center justify-center w-10 h-10 bg-white/80 hover:bg-white text-zinc-700 rounded-full shadow-sm backdrop-blur-sm cursor-pointer transition-colors border border-zinc-200" title="Solid Color Background">
+                      <span className="text-lg">🎨</span>
+                      <input 
+                        type="color" 
+                        value={backgroundColor || '#ffffff'} 
+                        onChange={handleBackgroundColorChange}
+                        className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
+                      />
+                    </label>
+                  </div>
+                </>
+              )}
+            </DragDropWrapper>
           </div>
 
           {error && (
@@ -1824,6 +2109,7 @@ export default function App() {
                     <label className="text-xs text-zinc-500 font-medium">{t.audioOffset}</label>
                     <input 
                       type="number" 
+                      step="0.01"
                       value={audioOffset}
                       onChange={(e) => setAudioOffset(Number(e.target.value))}
                       className="w-24 bg-zinc-100 border border-zinc-300 rounded-lg px-2 py-1 text-sm text-zinc-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
