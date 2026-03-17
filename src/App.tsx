@@ -759,7 +759,7 @@ export default function App() {
     }
   };
 
-  const exportWebMRealtime = async () => {
+  const exportVideoRealtime = async () => {
     if (!parsedData) return;
     setIsExporting(true);
     isExportingRef.current = true;
@@ -833,8 +833,15 @@ export default function App() {
     const videoBlob = new Blob(chunks, { type: mimeType });
 
     try {
-      if (audioFileRef.current) {
-        setExportStatus(i18n[language].muxingAudio || 'Muxing audio...');
+      if (exportFormat === 'webm' && !audioFileRef.current) {
+        const url = URL.createObjectURL(videoBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `lipsync_${Date.now()}.webm`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        setExportStatus(i18n[language].encodingVideo || 'Converting video...');
         if (!ffmpegLoaded) {
           alert(i18n[language].ffmpegNotLoadedAlert);
           throw new Error("FFmpeg not loaded");
@@ -843,245 +850,73 @@ export default function App() {
         const videoBuffer = await videoBlob.arrayBuffer();
         await ffmpeg.writeFile('temp_video.webm', new Uint8Array(videoBuffer));
 
-        const audioBuffer = await audioFileRef.current.arrayBuffer();
-        const ext = audioFileRef.current.name.split('.').pop() || 'mp3';
-        await ffmpeg.writeFile(`input_audio.${ext}`, new Uint8Array(audioBuffer));
-
         const args = [];
-        if (audioOffset > 0) {
-          args.push('-itsoffset', (audioOffset / 1000).toString());
-        }
-        args.push('-i', 'temp_video.webm');
-        
-        if (audioOffset < 0) {
-          args.push('-itsoffset', (Math.abs(audioOffset) / 1000).toString());
-        }
-        args.push('-i', `input_audio.${ext}`);
+        let hasAudio = false;
+        let ext = 'mp3';
 
-        args.push('-c:v', 'copy', '-c:a', 'libopus', 'output.webm');
+        if (audioFileRef.current && exportFormat !== 'gif') {
+          hasAudio = true;
+          const audioBuffer = await audioFileRef.current.arrayBuffer();
+          ext = audioFileRef.current.name.split('.').pop() || 'mp3';
+          await ffmpeg.writeFile(`input_audio.${ext}`, new Uint8Array(audioBuffer));
+
+          if (audioOffset > 0) {
+            args.push('-itsoffset', (audioOffset / 1000).toString());
+          }
+          args.push('-i', 'temp_video.webm');
+          
+          if (audioOffset < 0) {
+            args.push('-itsoffset', (Math.abs(audioOffset) / 1000).toString());
+          }
+          args.push('-i', `input_audio.${ext}`);
+        } else {
+          args.push('-i', 'temp_video.webm');
+        }
+
+        const outputName = `output.${exportFormat}`;
+
+        if (exportFormat === 'webm') {
+          args.push('-c:v', 'copy', '-c:a', 'libopus', outputName);
+        } else if (exportFormat === 'mp4' || exportFormat === 'mov') {
+          args.push('-c:v', 'libx264', '-preset', 'fast', '-crf', '23', '-pix_fmt', 'yuv420p');
+          if (hasAudio) args.push('-c:a', 'aac', '-b:a', '192k');
+          args.push(outputName);
+        } else if (exportFormat === 'mkv') {
+          args.push('-c:v', 'libx264', '-preset', 'fast', '-crf', '23');
+          if (hasAudio) args.push('-c:a', 'aac', '-b:a', '192k');
+          args.push(outputName);
+        } else if (exportFormat === 'gif') {
+          args.push('-vf', 'fps=15,scale=512:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse');
+          args.push(outputName);
+        }
 
         await ffmpeg.exec(args);
 
-        const fileData = await ffmpeg.readFile('output.webm');
+        const fileData = await ffmpeg.readFile(outputName);
         const data = new Uint8Array(fileData as ArrayBuffer);
-        const finalBlob = new Blob([data.buffer], { type: 'video/webm' });
+        const outputMimeType = exportFormat === 'webm' ? 'video/webm' : 
+                               exportFormat === 'mp4' ? 'video/mp4' : 
+                               exportFormat === 'mov' ? 'video/quicktime' : 
+                               exportFormat === 'mkv' ? 'video/x-matroska' : 'image/gif';
+        const finalBlob = new Blob([data.buffer], { type: outputMimeType });
         
         const url = URL.createObjectURL(finalBlob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `lipsync_${Date.now()}.webm`;
+        a.download = `lipsync_${Date.now()}.${exportFormat}`;
         a.click();
         URL.revokeObjectURL(url);
 
         try { await ffmpeg.deleteFile('temp_video.webm'); } catch(e){}
-        try { await ffmpeg.deleteFile(`input_audio.${ext}`); } catch(e){}
-        try { await ffmpeg.deleteFile('output.webm'); } catch(e){}
-
-      } else {
-        const url = URL.createObjectURL(videoBlob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `lipsync_${Date.now()}.webm`;
-        a.click();
-        URL.revokeObjectURL(url);
-      }
-    } catch (err) {
-      console.error("WebM Export failed:", err);
-      setFfmpegError(t.conversionFailed + String(err));
-    } finally {
-      setIsExporting(false);
-      isExportingRef.current = false;
-      setExportStatus('');
-      setExportProgress(0);
-      const activeNote = parsedData.notes.find(n => currentTime >= n.startTime && currentTime < n.startTime + n.duration);
-      drawCanvas(currentMouth, currentTime, activeNote ? activeNote.cleanedLyric : '');
-    }
-  };
-
-  const exportVideoOffline = async () => {
-    if (exportFormat === 'webm') {
-      return exportWebMRealtime();
-    }
-
-    if (!parsedData) return;
-    if (!ffmpegLoaded) {
-      alert(i18n[language].ffmpegNotLoadedAlert);
-      return;
-    }
-    
-    setIsExporting(true);
-    isExportingRef.current = true;
-    setExportProgress(0);
-    setExportStatus(i18n[language].renderingFrames);
-    setFfmpegError('');
-
-    // Pause playback if playing
-    if (isPlaying) {
-      togglePlay();
-    }
-
-    const ffmpeg = ffmpegRef.current;
-    const fps = 30; // 恢复到30fps
-    const lastNote = parsedData.notes[parsedData.notes.length - 1];
-    const totalDurationMs = lastNote ? lastNote.startTime + lastNote.duration : 0;
-    const totalFrames = Math.ceil((totalDurationMs + 500) / 1000 * fps); // 500ms padding
-    
-    const canvas = canvasRef.current;
-    if (!canvas) {
-      setIsExporting(false);
-      isExportingRef.current = false;
-      return;
-    }
-
-    // 创建一个离屏 Canvas，限制最大分辨率以防止内存溢出
-    const MAX_EXPORT_DIMENSION = 1280;
-    let exportScale = 1;
-    if (canvas.width > MAX_EXPORT_DIMENSION || canvas.height > MAX_EXPORT_DIMENSION) {
-      exportScale = Math.min(MAX_EXPORT_DIMENSION / canvas.width, MAX_EXPORT_DIMENSION / canvas.height);
-    }
-    const exportWidth = Math.round(canvas.width * exportScale);
-    const exportHeight = Math.round(canvas.height * exportScale);
-    
-    const exportCanvas = document.createElement('canvas');
-    exportCanvas.width = exportWidth;
-    exportCanvas.height = exportHeight;
-    const exportCtx = exportCanvas.getContext('2d');
-
-    let frameExt = '';
-    let hasAudio = false;
-    const outputName = `output.${exportFormat}`;
-
-    try {
-      // 1. Render frames
-      const isTransparent = exportFormat === 'webm' || exportFormat === 'gif';
-      const mimeType = isTransparent ? 'image/webp' : 'image/jpeg';
-      
-      for (let i = 0; i < totalFrames; i++) {
-        const timeMs = (i / fps) * 1000;
-        
-        let activeNote: NoteData | null = null;
-        let l = 0, r = parsedData.notes.length - 1;
-        while (l <= r) {
-          const m = Math.floor((l + r) / 2);
-          const note = parsedData.notes[m];
-          if (timeMs >= note.startTime && timeMs < note.startTime + note.duration) {
-            activeNote = note;
-            break;
-          } else if (timeMs < note.startTime) {
-            r = m - 1;
-          } else {
-            l = m + 1;
-          }
+        if (hasAudio) {
+          try { await ffmpeg.deleteFile(`input_audio.${ext}`); } catch(e){}
         }
-        
-        const mouth = activeNote ? getMouthShape(activeNote.cleanedLyric) : 'default';
-        const lyric = activeNote ? activeNote.cleanedLyric : '';
-        
-        // 绘制到主画布
-        drawCanvas(mouth, timeMs, lyric, !isTransparent);
-        
-        // 缩放并绘制到导出画布
-        if (exportCtx) {
-          exportCtx.drawImage(canvas, 0, 0, exportWidth, exportHeight);
-        }
-        
-        const targetCanvas = exportCtx ? exportCanvas : canvas;
-        const blob = await new Promise<Blob | null>(resolve => targetCanvas.toBlob(resolve, mimeType, 0.7)); // 进一步降低质量到0.7
-        
-        if (blob) {
-          if (!frameExt) {
-            frameExt = blob.type === 'image/webp' ? 'webp' : blob.type === 'image/jpeg' ? 'jpg' : 'png';
-          }
-          const buffer = await blob.arrayBuffer();
-          const frameName = `frame_${i.toString().padStart(5, '0')}.${frameExt}`;
-          await ffmpeg.writeFile(frameName, new Uint8Array(buffer));
-        }
-        
-        if (i % 5 === 0) {
-          setExportProgress(Math.round((i / totalFrames) * 50));
-          setExportStatus(`${i18n[language].renderingFrames} ${i}/${totalFrames}`);
-          await new Promise(resolve => setTimeout(resolve, 0)); // Yield
-        }
+        try { await ffmpeg.deleteFile(outputName); } catch(e){}
       }
-
-      setExportStatus(i18n[language].encodingVideo);
-      
-      if (audioFileRef.current && exportFormat !== 'gif') {
-        const audioBuffer = await audioFileRef.current.arrayBuffer();
-        const ext = audioFileRef.current.name.split('.').pop() || 'mp3';
-        await ffmpeg.writeFile(`input_audio.${ext}`, new Uint8Array(audioBuffer));
-        hasAudio = true;
-      }
-
-      const ffmpegArgs = [];
-
-      if (audioOffset > 0) {
-        ffmpegArgs.push('-itsoffset', (audioOffset / 1000).toString());
-      }
-      ffmpegArgs.push('-framerate', `${fps}`, '-i', `frame_%05d.${frameExt}`);
-
-      if (hasAudio) {
-        if (audioOffset < 0) {
-          ffmpegArgs.push('-itsoffset', (Math.abs(audioOffset) / 1000).toString());
-        }
-        const ext = audioFileRef.current!.name.split('.').pop() || 'mp3';
-        ffmpegArgs.push('-i', `input_audio.${ext}`);
-      }
-
-      if (exportFormat === 'webm') {
-        ffmpegArgs.push('-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p');
-        if (hasAudio) ffmpegArgs.push('-c:a', 'libopus');
-      } else if (exportFormat === 'mp4' || exportFormat === 'mov' || exportFormat === 'mkv') {
-        // 使用更快的预设，减少内存占用
-        ffmpegArgs.push('-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'fast', '-crf', '28');
-        if (hasAudio) ffmpegArgs.push('-c:a', 'aac');
-      } else if (exportFormat === 'gif') {
-        ffmpegArgs.push('-vf', `scale=${exportWidth}:${exportHeight}:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse`);
-      }
-
-      if (hasAudio && exportFormat !== 'gif') {
-        ffmpegArgs.push('-map', '0:v:0', '-map', '1:a:0', '-shortest');
-      }
-
-      ffmpegArgs.push(outputName);
-
-      await ffmpeg.exec(ffmpegArgs);
-
-      const fileData = await ffmpeg.readFile(outputName);
-      const data = new Uint8Array(fileData as ArrayBuffer);
-      
-      const outputMimeType = exportFormat === 'webm' ? 'video/webm' : 
-                       exportFormat === 'mp4' ? 'video/mp4' : 
-                       exportFormat === 'mov' ? 'video/quicktime' : 
-                       exportFormat === 'mkv' ? 'video/x-matroska' : 'image/gif';
-                       
-      const blobOutput = new Blob([data.buffer], { type: outputMimeType });
-      const url = URL.createObjectURL(blobOutput);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `lipsync_${Date.now()}.${exportFormat}`;
-      a.click();
-      URL.revokeObjectURL(url);
-
     } catch (err) {
       console.error("Export failed:", err);
       setFfmpegError(t.conversionFailed + String(err));
     } finally {
-      // 核心修复：必须在 finally 中清理文件，否则失败后再次导出必崩
-      for (let i = 0; i < totalFrames; i++) {
-        const frameName = `frame_${i.toString().padStart(5, '0')}.${frameExt || 'jpg'}`;
-        try { await ffmpeg.deleteFile(frameName); } catch (e) {}
-        const frameNameWebp = `frame_${i.toString().padStart(5, '0')}.webp`;
-        try { await ffmpeg.deleteFile(frameNameWebp); } catch (e) {}
-        const frameNamePng = `frame_${i.toString().padStart(5, '0')}.png`;
-        try { await ffmpeg.deleteFile(frameNamePng); } catch (e) {}
-      }
-      if (hasAudio && audioFileRef.current) {
-        const ext = audioFileRef.current.name.split('.').pop() || 'mp3';
-        try { await ffmpeg.deleteFile(`input_audio.${ext}`); } catch (e) {}
-      }
-      try { await ffmpeg.deleteFile(outputName); } catch (e) {}
-
       setIsExporting(false);
       isExportingRef.current = false;
       setExportStatus('');
@@ -1868,7 +1703,7 @@ export default function App() {
                     </select>
 
                     <button 
-                      onClick={exportVideoOffline}
+                      onClick={exportVideoRealtime}
                       disabled={isExporting}
                       className={`flex items-center justify-center px-6 h-14 rounded-xl font-medium shadow-lg transition-all active:scale-95 space-x-2
                         ${isExporting
