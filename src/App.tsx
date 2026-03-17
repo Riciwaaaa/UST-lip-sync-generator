@@ -316,18 +316,20 @@ const parseGifFile = async (file: File, maxDimension: number = 800): Promise<Gif
       previousImageData = tempCtx.getImageData(0, 0, width, height);
     }
     
-    const patchData = new ImageData(
-      new Uint8ClampedArray(frame.patch),
-      dims.width,
-      dims.height
-    );
-    
-    const patchCanvas = document.createElement('canvas');
-    patchCanvas.width = dims.width;
-    patchCanvas.height = dims.height;
-    patchCanvas.getContext('2d')!.putImageData(patchData, 0, 0);
-    
-    tempCtx.drawImage(patchCanvas, dims.left, dims.top);
+    if (dims.width > 0 && dims.height > 0) {
+      const patchData = new ImageData(
+        new Uint8ClampedArray(frame.patch),
+        dims.width,
+        dims.height
+      );
+      
+      const patchCanvas = document.createElement('canvas');
+      patchCanvas.width = dims.width;
+      patchCanvas.height = dims.height;
+      patchCanvas.getContext('2d')!.putImageData(patchData, 0, 0);
+      
+      tempCtx.drawImage(patchCanvas, dims.left, dims.top);
+    }
     
     const frameCanvas = document.createElement('canvas');
     frameCanvas.width = targetWidth;
