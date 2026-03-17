@@ -279,21 +279,13 @@ export interface GifFrame {
   delay: number;
 }
 
-const parseGifFile = async (file: File, maxDimension: number = 800): Promise<GifFrame[]> => {
+const parseGifFile = async (file: File): Promise<GifFrame[]> => {
   const buffer = await file.arrayBuffer();
   const gif = parseGIF(buffer);
   const frames = decompressFrames(gif, true);
   
   const width = gif.lsd.width;
   const height = gif.lsd.height;
-  
-  let scale = 1;
-  if (width > maxDimension || height > maxDimension) {
-    scale = Math.min(maxDimension / width, maxDimension / height);
-  }
-  
-  const targetWidth = Math.floor(width * scale);
-  const targetHeight = Math.floor(height * scale);
   
   const tempCanvas = document.createElement('canvas');
   tempCanvas.width = width;
@@ -326,14 +318,9 @@ const parseGifFile = async (file: File, maxDimension: number = 800): Promise<Gif
     tempCtx.drawImage(patchCanvas, dims.left, dims.top);
     
     const frameCanvas = document.createElement('canvas');
-    frameCanvas.width = targetWidth;
-    frameCanvas.height = targetHeight;
-    const frameCtx = frameCanvas.getContext('2d')!;
-    if (scale === 1) {
-      frameCtx.drawImage(tempCanvas, 0, 0);
-    } else {
-      frameCtx.drawImage(tempCanvas, 0, 0, targetWidth, targetHeight);
-    }
+    frameCanvas.width = width;
+    frameCanvas.height = height;
+    frameCanvas.getContext('2d')!.drawImage(tempCanvas, 0, 0);
     
     gifCanvasData.push({
       canvas: frameCanvas,
@@ -464,23 +451,7 @@ export default function App() {
       }
     });
 
-    Object.values(mouthGifFramesRef.current).forEach((frames: any) => {
-      if (frames && frames.length > 0) {
-        hasMouthImage = true;
-        maxWidth = Math.max(maxWidth, frames[0].canvas.width);
-        maxHeight = Math.max(maxHeight, frames[0].canvas.height);
-      }
-    });
-
-    Object.values(overrideImageElementsRef.current).forEach((img) => {
-      if (img) {
-        hasMouthImage = true;
-        maxWidth = Math.max(maxWidth, (img as HTMLImageElement).naturalWidth);
-        maxHeight = Math.max(maxHeight, (img as HTMLImageElement).naturalHeight);
-      }
-    });
-
-    Object.values(overrideGifFramesRef.current).forEach((frames: any) => {
+    Object.values(mouthGifFramesRef.current).forEach((frames) => {
       if (frames && frames.length > 0) {
         hasMouthImage = true;
         maxWidth = Math.max(maxWidth, frames[0].canvas.width);
@@ -785,152 +756,6 @@ export default function App() {
       } else {
         drawCanvas(currentMouth, time, '');
       }
-    }
-  };
-
-  const exportVideoOffline = async () => {
-    if (!parsedDataRef.current) return;
-    setIsExporting(true);
-    isExportingRef.current = true;
-    setExportStatus(t.recordingWebM || 'Exporting...');
-    setExportProgress(0);
-
-    try {
-      const ffmpeg = ffmpegRef.current;
-      const totalDuration = parsedDataRef.current.notes.length > 0
-        ? parsedDataRef.current.notes[parsedDataRef.current.notes.length - 1].startTime +
-          parsedDataRef.current.notes[parsedDataRef.current.notes.length - 1].duration
-        : 0;
-
-      if (totalDuration === 0) throw new Error("No notes to export");
-
-      const fps = exportFormat === 'gif' ? 15 : 20;
-      const totalFrames = Math.ceil((totalDuration / 1000) * fps);
-      
-      const targetCanvas = document.createElement('canvas');
-      const MAX_EXPORT_DIMENSION = exportFormat === 'gif' ? 512 : 720;
-      
-      let scale = 1;
-      if (canvasSize.width > MAX_EXPORT_DIMENSION || canvasSize.height > MAX_EXPORT_DIMENSION) {
-        scale = Math.min(MAX_EXPORT_DIMENSION / canvasSize.width, MAX_EXPORT_DIMENSION / canvasSize.height);
-      }
-      
-      targetCanvas.width = Math.floor(canvasSize.width * scale);
-      targetCanvas.height = Math.floor(canvasSize.height * scale);
-      const targetCtx = targetCanvas.getContext('2d');
-      if (!targetCtx) throw new Error("Could not get 2d context for export");
-
-      const isTransparent = exportFormat === 'webm' || exportFormat === 'gif';
-      const mimeType = isTransparent ? 'image/webp' : 'image/jpeg';
-      const frameExt = isTransparent ? 'webp' : 'jpg';
-
-      for (let i = 0; i < totalFrames; i++) {
-        if (!isExportingRef.current) throw new Error("Export cancelled");
-        
-        const timeMs = (i / fps) * 1000;
-        let mouth: MouthShape = 'default';
-        let lyric = '';
-        
-        const activeNote = parsedDataRef.current.notes.find(n => timeMs >= n.startTime && timeMs < n.startTime + n.duration);
-        if (activeNote) {
-          mouth = getMouthShape(activeNote.cleanedLyric);
-          lyric = activeNote.cleanedLyric;
-        }
-
-        drawCanvas(mouth, timeMs, lyric, !isTransparent);
-        
-        targetCtx.clearRect(0, 0, targetCanvas.width, targetCanvas.height);
-        if (!isTransparent) {
-          targetCtx.fillStyle = 'white';
-          targetCtx.fillRect(0, 0, targetCanvas.width, targetCanvas.height);
-        }
-        if (canvasRef.current) {
-          targetCtx.drawImage(canvasRef.current, 0, 0, targetCanvas.width, targetCanvas.height);
-        }
-
-        const blob = await new Promise<Blob | null>(resolve => targetCanvas.toBlob(resolve, mimeType, 0.7));
-        if (blob) {
-          const buffer = await blob.arrayBuffer();
-          const frameName = `frame_${i.toString().padStart(5, '0')}.${frameExt}`;
-          await ffmpeg.writeFile(frameName, new Uint8Array(buffer));
-        }
-
-        if (i % 10 === 0) {
-          setExportProgress((i / totalFrames) * 50);
-        }
-      }
-
-      setExportStatus(t.convertingVideo || 'Converting...');
-      
-      let hasAudio = false;
-      let audioExt = 'mp3';
-      if (audioFileRef.current && exportFormat !== 'gif') {
-        hasAudio = true;
-        const audioBuffer = await audioFileRef.current.arrayBuffer();
-        audioExt = audioFileRef.current.name.split('.').pop() || 'mp3';
-        await ffmpeg.writeFile(`input_audio.${audioExt}`, new Uint8Array(audioBuffer));
-      }
-
-      const ffmpegArgs = [];
-      ffmpegArgs.push('-framerate', fps.toString(), '-i', `frame_%05d.${frameExt}`);
-      
-      if (hasAudio) {
-        if (audioOffset > 0) {
-          ffmpegArgs.push('-itsoffset', (audioOffset / 1000).toString());
-        }
-        ffmpegArgs.push('-i', `input_audio.${audioExt}`);
-      }
-
-      const outputName = `output.${exportFormat}`;
-
-      if (exportFormat === 'webm') {
-        ffmpegArgs.push('-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p', '-auto-alt-ref', '0');
-        if (hasAudio) ffmpegArgs.push('-c:a', 'libopus');
-      } else if (exportFormat === 'gif') {
-        ffmpegArgs.push('-vf', 'split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse');
-      }
-
-      ffmpegArgs.push(outputName);
-
-      await ffmpeg.exec(ffmpegArgs);
-
-      const data = await ffmpeg.readFile(outputName);
-      const videoBlob = new Blob([data], { type: exportFormat === 'webm' ? 'video/webm' : 'image/gif' });
-      const url = URL.createObjectURL(videoBlob);
-      
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `lipsync_${Date.now()}.${exportFormat}`;
-      a.click();
-      URL.revokeObjectURL(url);
-
-      // Cleanup
-      for (let i = 0; i < totalFrames; i++) {
-        await ffmpeg.deleteFile(`frame_${i.toString().padStart(5, '0')}.${frameExt}`).catch(() => {});
-      }
-      await ffmpeg.deleteFile(outputName).catch(() => {});
-      if (hasAudio) await ffmpeg.deleteFile(`input_audio.${audioExt}`).catch(() => {});
-
-    } catch (err) {
-      console.error("Export failed:", err);
-      if (isExportingRef.current) {
-        setFfmpegError(t.conversionFailed + String(err));
-      }
-    } finally {
-      setIsExporting(false);
-      isExportingRef.current = false;
-      setExportStatus('');
-      setExportProgress(0);
-      const activeNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTime && currentTime < n.startTime + n.duration);
-      drawCanvas(currentMouth, currentTime, activeNote ? activeNote.cleanedLyric : '');
-    }
-  };
-
-  const handleExport = () => {
-    if (exportFormat === 'webm' || exportFormat === 'gif') {
-      exportVideoOffline();
-    } else {
-      exportVideoRealtime();
     }
   };
 
@@ -1366,7 +1191,64 @@ export default function App() {
 
     if (file.type === 'image/gif') {
       try {
-        const gifCanvasData = await parseGifFile(file, 1280);
+        const buffer = await file.arrayBuffer();
+        const gif = parseGIF(buffer);
+        const frames = decompressFrames(gif, true);
+        
+        const width = gif.lsd.width;
+        const height = gif.lsd.height;
+        
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = width;
+        tempCanvas.height = height;
+        const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+        if (!tempCtx) return;
+        
+        let gifCanvasData: GifFrame[] = [];
+        let previousImageData: ImageData | null = null;
+        
+        for (let i = 0; i < frames.length; i++) {
+          const frame = frames[i];
+          const dims = frame.dims;
+          
+          if (frame.disposalType === 3) {
+            previousImageData = tempCtx.getImageData(0, 0, width, height);
+          }
+          
+          const patchData = new ImageData(
+            new Uint8ClampedArray(frame.patch),
+            dims.width,
+            dims.height
+          );
+          
+          const patchCanvas = document.createElement('canvas');
+          patchCanvas.width = dims.width;
+          patchCanvas.height = dims.height;
+          patchCanvas.getContext('2d')!.putImageData(patchData, 0, 0);
+          
+          // Handle transparency
+          if (frame.transparentIndex !== undefined) {
+             // gifuct-js handles transparency in the patch data already when buildPalette is true
+          }
+
+          tempCtx.drawImage(patchCanvas, dims.left, dims.top);
+          
+          const frameCanvas = document.createElement('canvas');
+          frameCanvas.width = width;
+          frameCanvas.height = height;
+          frameCanvas.getContext('2d')!.drawImage(tempCanvas, 0, 0);
+          
+          gifCanvasData.push({
+            canvas: frameCanvas,
+            delay: Math.max(frame.delay, 20) // Minimum delay to prevent infinite loops or too fast
+          });
+          
+          if (frame.disposalType === 2) {
+            tempCtx.clearRect(dims.left, dims.top, dims.width, dims.height);
+          } else if (frame.disposalType === 3 && previousImageData) {
+            tempCtx.putImageData(previousImageData, 0, 0);
+          }
+        }
         
         bgGifFramesRef.current = gifCanvasData;
         setBgGifFrames(gifCanvasData);
@@ -1821,7 +1703,7 @@ export default function App() {
                     </select>
 
                     <button 
-                      onClick={handleExport}
+                      onClick={exportVideoRealtime}
                       disabled={isExporting}
                       className={`flex items-center justify-center px-6 h-14 rounded-xl font-medium shadow-lg transition-all active:scale-95 space-x-2
                         ${isExporting
