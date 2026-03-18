@@ -691,7 +691,7 @@ export default function App() {
 
     let newTime = 0;
     if (audioRef.current && audioUrl) {
-      newTime = (audioRef.current.currentTime * 1000) - (audioOffsetRef.current * 1000);
+      newTime = audioRef.current.currentTime * 1000;
     } else {
       const now = performance.now();
       newTime = now - startTimeRef.current;
@@ -716,16 +716,18 @@ export default function App() {
     }
 
     setCurrentTime(newTime);
+    
+    const visualTime = newTime - (audioOffsetRef.current * 1000);
 
     let activeNote: NoteData | null = null;
     let l = 0, r = data.notes.length - 1;
     while (l <= r) {
       const m = Math.floor((l + r) / 2);
       const note = data.notes[m];
-      if (newTime >= note.startTime && newTime < note.startTime + note.duration) {
+      if (visualTime >= note.startTime && visualTime < note.startTime + note.duration) {
         activeNote = note;
         break;
-      } else if (newTime < note.startTime) {
+      } else if (visualTime < note.startTime) {
         r = m - 1;
       } else {
         l = m + 1;
@@ -736,7 +738,7 @@ export default function App() {
     const lyric = activeNote ? activeNote.cleanedLyric : '';
     setCurrentMouth(mouth);
     const isTransparent = isExportingRef.current && (exportFormat === 'webm' || exportFormat === 'gif');
-    drawCanvas(mouth, newTime, lyric, isTransparent);
+    drawCanvas(mouth, visualTime, lyric, isTransparent);
 
     if (isPlayingRef.current) {
       reqRef.current = requestAnimationFrame(updateFrame);
@@ -756,8 +758,7 @@ export default function App() {
       isPlayingRef.current = true;
       
       if (audioRef.current && audioUrl) {
-        const targetAudioTime = (currentTime / 1000) + audioOffsetRef.current;
-        audioRef.current.currentTime = Math.max(0, targetAudioTime);
+        audioRef.current.currentTime = currentTime / 1000;
         audioRef.current.play().catch(e => console.error("Audio play failed:", e));
       } else {
         startTimeRef.current = performance.now() - currentTime;
@@ -773,8 +774,7 @@ export default function App() {
     setCurrentTime(time);
     
     if (audioRef.current && audioUrl) {
-      const targetAudioTime = (time / 1000) + audioOffsetRef.current;
-      audioRef.current.currentTime = Math.max(0, targetAudioTime);
+      audioRef.current.currentTime = time / 1000;
     }
     
     if (isPlayingRef.current) {
@@ -785,15 +785,16 @@ export default function App() {
       // 静态更新画布
       const data = parsedDataRef.current;
       if (data) {
+        const visualTime = time - (audioOffsetRef.current * 1000);
         let activeNote: NoteData | null = null;
         let l = 0, r = data.notes.length - 1;
         while (l <= r) {
           const m = Math.floor((l + r) / 2);
           const note = data.notes[m];
-          if (time >= note.startTime && time < note.startTime + note.duration) {
+          if (visualTime >= note.startTime && visualTime < note.startTime + note.duration) {
             activeNote = note;
             break;
-          } else if (time < note.startTime) {
+          } else if (visualTime < note.startTime) {
             r = m - 1;
           } else {
             l = m + 1;
@@ -802,7 +803,7 @@ export default function App() {
         const mouth = activeNote ? getMouthShape(activeNote.cleanedLyric) : 'default';
         const lyric = activeNote ? activeNote.cleanedLyric : '';
         setCurrentMouth(mouth);
-        drawCanvas(mouth, time, lyric);
+        drawCanvas(mouth, visualTime, lyric);
       } else {
         drawCanvas(currentMouth, time, '');
       }
@@ -859,16 +860,17 @@ export default function App() {
           if (!isExportingRef.current) throw new Error("Export cancelled");
           
           const timeMs = (i / fps) * 1000;
+          const visualTime = timeMs - (audioOffsetRef.current * 1000);
           let mouth: MouthShape = 'default';
           let lyric = '';
           
-          const activeNote = parsedDataRef.current.notes.find(n => timeMs >= n.startTime && timeMs < n.startTime + n.duration);
+          const activeNote = parsedDataRef.current.notes.find(n => visualTime >= n.startTime && visualTime < n.startTime + n.duration);
           if (activeNote) {
             mouth = getMouthShape(activeNote.cleanedLyric);
             lyric = activeNote.cleanedLyric;
           }
 
-          drawCanvas(mouth, timeMs, lyric, isTransparent); // Skip background if transparent
+          drawCanvas(mouth, visualTime, lyric, isTransparent); // Skip background if transparent
           
           targetCtx.clearRect(0, 0, targetCanvas.width, targetCanvas.height);
           if (!isTransparent) {
@@ -941,9 +943,6 @@ export default function App() {
       const ffmpegArgs = [];
       
       if (hasAudio) {
-        if (audioOffset > 0) {
-          ffmpegArgs.push('-itsoffset', audioOffset.toString());
-        }
         ffmpegArgs.push('-i', `input_audio.${audioExt}`);
       }
       
@@ -1035,7 +1034,7 @@ export default function App() {
     if (isPlaying) togglePlay();
     setCurrentTime(0);
     if (audioRef.current) {
-      audioRef.current.currentTime = Math.max(0, audioOffsetRef.current);
+      audioRef.current.currentTime = 0;
     }
 
     const stream = canvas.captureStream(30);
@@ -1070,7 +1069,7 @@ export default function App() {
     reqRef.current = requestAnimationFrame(updateFrame);
 
     const progressInterval = setInterval(() => {
-      const current = audioRef.current ? (audioRef.current.currentTime * 1000) - (audioOffsetRef.current * 1000) : currentTime;
+      const current = audioRef.current ? audioRef.current.currentTime * 1000 : currentTime;
       const progress = Math.min(100, Math.round((current / durationToRecord) * 100));
       setExportProgress(progress);
       setExportStatus(`[Recording WebM] ${progress}%`);
@@ -1120,14 +1119,7 @@ export default function App() {
           ext = audioFileRef.current.name.split('.').pop() || 'mp3';
           await ffmpeg.writeFile(`input_audio.${ext}`, new Uint8Array(audioBuffer));
 
-          if (audioOffset > 0) {
-            args.push('-itsoffset', audioOffset.toString());
-          }
           args.push('-i', 'temp_video.webm');
-          
-          if (audioOffset < 0) {
-            args.push('-itsoffset', Math.abs(audioOffset).toString());
-          }
           args.push('-i', `input_audio.${ext}`);
         } else {
           args.push('-i', 'temp_video.webm');
