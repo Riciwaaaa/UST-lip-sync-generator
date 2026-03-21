@@ -69,7 +69,7 @@ const i18n = {
     language: "语言",
     notice: "须知",
     noticeTitle: "使用须知",
-    noticeContent: "针对日语UST做的，什么类型的UST都能用。其它语言的UST理论上也可以用，但嘴型只能用单字覆盖一个个传。需要忽略嘴型设置里的五个元音。\n所有上传图片的地方都可以上传GIF。\n可以从bowlroll等地找到各种公开配布的UST文件，发布使用他人UST制作的内容时需要标注原作者。\n有什么问题可以B站私信我 -> UID 487559302",
+    noticeContent: "针对日语UST做的，什么类型的UST都能用。其它语言的UST理论上也可以用，但嘴型只能用单字覆盖一个个传。需要忽略嘴型设置里的五个元音。\n受性能限制，不建议在移动端浏览器使用。\n可以从bowlroll等地找到各种公开配布的UST文件，发布使用他人UST制作的内容时需要标注原作者。\n有什么问题可以联系我 -> \nB站：UID 487559302\nemail: riciwaaaa@gmail.com\n",
     confirm: "确认",
     step1: "嘴型设置",
     step2: "UST/音频/背景图",
@@ -91,6 +91,9 @@ const i18n = {
     exporting: "转换中",
     recording: "录制中...",
     exportVideo: "导出视频",
+    exportErrorPrefix: "导出失败。如屡次遭遇此问题，请截图错误信息私信开发者！\n错误信息: ",
+    envWarning: "检测到您正在使用移动端或内置浏览器。由于视频渲染需要耗费大量内存，极易导致崩溃，强烈建议您复制网址到 PC 端浏览器中进行导出操作！",
+    longVideoWarning: "检测到视频长度超过5分钟。长视频导出可能会消耗极长的时间和极高的内存，存在崩溃风险。是否继续？",
     webmWarning: "提示：WebM 透明格式将采用【实时录制】方案以防止内存溢出。导出期间请勿切换标签页或最小化浏览器。",
     webmGifWarning: "注意：当背景为 GIF 格式时，导出 WebM 可能无法保留透明通道。如需透明背景，建议使用静态图片背景或导出 GIF 格式。",
     recordingWebM: "正在实时录制画面...",
@@ -138,7 +141,7 @@ const i18n = {
     language: "Language",
     notice: "Notice",
     noticeTitle: "Usage Notice",
-    noticeContent: "Optimized for Japanese USTs and compatible with all UST types. Other languages are theoretically supported, but you must ignore the five default vowel settings and manually upload mouth shapes one by one using the custom syllable overrides.\nGIF files are supported in all image upload sections.\nYou can find publicly distributed UST files on websites like BowlRoll. When publishing content created using someone else's UST, please make sure to credit the original author.\nIf you have any questions, feel free to email me -> Riciwaaaa@gmail.com",
+    noticeContent: "Designed for Japanese USTs, but any type of UST will work. USTs in other languages can theoretically be used, but mouth shapes must be uploaded one by one using the single-character override feature. You will need to ignore the five basic vowel settings.\nDue to performance limitations, using this tool on mobile browsers is highly not recommended. \nYou can find various publicly distributed UST files on sites like BowlRoll. Please note that when publishing content made using someone else's UST, you must credit the original author.\nIf you have any questions or feedback, feel free to contact me -> \nemail: riciwaaaa@gmail.com",
     confirm: "Confirm",
     step1: "Mouth Shapes",
     step2: "UST / Audio / Background",
@@ -160,6 +163,9 @@ const i18n = {
     exporting: "Converting",
     recording: "Recording...",
     exportVideo: "Export Video",
+    exportErrorPrefix: "Export failed. If this issue persists, please screenshot the error and contact the developer!\nError: ",
+    envWarning: "Mobile or in-app browser detected. Video rendering consumes a lot of memory and may crash. It is highly recommended to copy the URL to a PC browser for exporting!",
+    longVideoWarning: "Video length exceeds 5 minutes. Exporting long videos may take a very long time and consume high memory, risking a crash. Continue?",
     webmWarning: "Note: WebM format uses real-time recording to prevent memory issues. Please do not switch tabs or minimize the browser during export.",
     webmGifWarning: "Note: When the background is a GIF, exporting to WebM may not preserve the transparent channel. For a transparent background, it's recommended to use a static image background or export as GIF.",
     recordingWebM: "Recording real-time...",
@@ -207,7 +213,7 @@ const i18n = {
     language: "言語",
     notice: "注意事項",
     noticeTitle: "注意事項",
-    noticeContent: "日本語UST向けに最適化されており、全タイプのUSTに対応しています。他言語のUSTも理論上は使用可能ですが、デフォルトの5つの母音設定を無視し、カスタム上書き機能を使って口の形を一つずつ手動でアップロードする必要があります。\n画像アップロード部分はすべてGIF形式に対応しています。\nBowlRollなどで公開配布されている様々なUSTファイルを利用できます。他者のUSTを使用して制作した動画を公開する際は、必ず原作者のクレジット表記を行ってください。\nご質問などがございましたら、お気軽にメールにてご連絡ください -> Riciwaaaa@gmail.com",
+    noticeContent: "日本語のUST向けに作られていますが、どの種類のUSTでも使用可能です。他言語のUSTも理論上は使用できますが、口の形は「単字特例（個別の文字の上書き）」機能を使って一つずつアップロードする必要があります。その場合、基本設定の5つの母音は無視してください。\nパフォーマンスの制限により、スマートフォンなどのモバイルブラウザでの使用は推奨していません（PC環境を推奨します）。\nBowlRollなどのサイトで、公開・配布されている様々なUSTファイルを見つけることができます。他の方が作成したUSTを使用して動画などの制作物を公開する際は、必ず原作者のクレジット（お名前）を表記してください。\nご質問や不具合の報告があれば、こちらまでご連絡ください -> \nemail: riciwaaaa@gmail.com",
     confirm: "確認",
     step1: "口パク設定",
     step2: "UST / 音声 / 背景",
@@ -229,6 +235,9 @@ const i18n = {
     exporting: "変換中",
     recording: "録画中...",
     exportVideo: "動画を出力",
+    exportErrorPrefix: "エクスポートに失敗しました。この問題が頻発する場合は、エラー画面のスクリーンショットを開発者にお送りください！\nエラー: ",
+    envWarning: "モバイル端末またはアプリ内ブラウザが検出されました。動画のレンダリングには大量のメモリを消費し、クラッシュする可能性が高いため、PCブラウザにURLをコピーしてエクスポートすることを強くお勧めします！",
+    longVideoWarning: "動画の長さが5分を超えています。長時間の動画出力は非常に時間がかかり、メモリを大量に消費するため、クラッシュする危険性があります。続行しますか？",
     webmWarning: "注：WebM形式はメモリ不足を防ぐためリアルタイム録画を使用します。エクスポート中はタブを切り替えたり、ブラウザを最小化したりしないでください。",
     webmGifWarning: "注意：背景がGIF形式の場合、WebMにエクスポートすると透明チャンネルが保持されない場合があります。透明な背景が必要な場合は、静止画像を使用するか、GIF形式でエクスポートすることをお勧めします。",
     recordingWebM: "リアルタイム録画中...",
@@ -270,6 +279,14 @@ const i18n = {
     renderingFrames: "フレームをレンダリング中",
     encodingVideo: "動画をエンコード中...",
   }
+};
+
+const isFragileEnvironment = () => {
+  const ua = navigator.userAgent || navigator.vendor || (window as any).opera;
+  const isIOS = /iPad|iPhone|iPod/.test(ua) && !(window as any).MSStream;
+  const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
+  const isInApp = /FBAN|FBAV|Twitter|Line|MicroMessenger|Instagram/i.test(ua);
+  return isIOS || isSafari || isInApp;
 };
 
 const getMouthShapeConfigs = (t: any): { id: MouthShape; label: string; color: string; bg: string; canvasBg: string; canvasColor: string }[] => [
@@ -889,6 +906,11 @@ export default function App() {
             await ffmpeg.writeFile(frameName, new Uint8Array(buffer));
           }
 
+          if (i % 100 === 0) {
+            // Memory Watchdog: Yield to main thread every 100 frames to prevent crash and allow GC
+            await new Promise(resolve => setTimeout(resolve, 0));
+          }
+
           if (i % 10 === 0 || i === totalFrames - 1) {
             const elapsed = (performance.now() - startTime) / 1000;
             const fpsCurrent = (i + 1) / elapsed;
@@ -984,11 +1006,12 @@ export default function App() {
       await ffmpeg.deleteFile(outputName).catch(() => {});
       if (hasAudio) await ffmpeg.deleteFile(`input_audio.${audioExt}`).catch(() => {});
 
-    } catch (err) {
+    } catch (err: any) {
       console.error("Export failed:", err);
       if (isExportingRef.current) {
-        const isOOM = String(err).includes('memory access out of bounds') || String(err).includes('RuntimeError');
-        setFfmpegError(isOOM ? "Memory limit exceeded! Try a shorter video or smaller resolution." : String(err));
+        const errMsg = err?.message || err?.name || String(err);
+        const isOOM = errMsg.includes('memory access out of bounds') || errMsg.includes('RuntimeError') || errMsg.includes('FS error');
+        setFfmpegError(isOOM ? `[Memory/FS Error] ${errMsg}` : errMsg);
       }
     } finally {
       // 彻底清理所有帧文件
@@ -1009,6 +1032,23 @@ export default function App() {
   };
 
   const handleExport = () => {
+    if (isFragileEnvironment()) {
+      if (!window.confirm(t.envWarning)) {
+        return;
+      }
+    }
+
+    const data = parsedDataRef.current;
+    if (data && data.notes.length > 0) {
+      const lastNote = data.notes[data.notes.length - 1];
+      const totalDuration = (lastNote.startTime + lastNote.duration) / 1000;
+      if (totalDuration > 300) {
+        if (!window.confirm(t.longVideoWarning)) {
+          return;
+        }
+      }
+    }
+
     if (exportFormat === 'webm') {
       recordRealtime();
     } else {
@@ -1024,74 +1064,74 @@ export default function App() {
     setExportProgress(0);
     setFfmpegError('');
 
-    const canvas = canvasRef.current;
-    if (!canvas) {
-      setIsExporting(false);
-      isExportingRef.current = false;
-      return;
-    }
-
-    if (isPlaying) togglePlay();
-    setCurrentTime(0);
-    if (audioRef.current) {
-      audioRef.current.currentTime = 0;
-    }
-
-    const stream = canvas.captureStream(30);
-    let mimeType = 'video/webm;codecs=vp9';
-    if (!MediaRecorder.isTypeSupported(mimeType)) {
-      mimeType = 'video/webm;codecs=vp8';
-    }
-    if (!MediaRecorder.isTypeSupported(mimeType)) {
-      mimeType = 'video/webm';
-    }
-    
-    const recorder = new MediaRecorder(stream, { mimeType });
-    const chunks: BlobPart[] = [];
-
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) chunks.push(e.data);
-    };
-
-    const lastNote = parsedData.notes[parsedData.notes.length - 1];
-    const totalDurationMs = lastNote ? lastNote.startTime + lastNote.duration : 0;
-    const durationToRecord = totalDurationMs + 500;
-
-    recorder.start();
-    
-    setIsPlaying(true);
-    isPlayingRef.current = true;
-    startTimeRef.current = performance.now();
-    if (audioRef.current && audioUrl) {
-      audioRef.current.play().catch(console.error);
-    }
-    if (reqRef.current) cancelAnimationFrame(reqRef.current);
-    reqRef.current = requestAnimationFrame(updateFrame);
-
-    const progressInterval = setInterval(() => {
-      const current = audioRef.current ? audioRef.current.currentTime * 1000 : currentTime;
-      const progress = Math.min(100, Math.round((current / durationToRecord) * 100));
-      setExportProgress(progress);
-      setExportStatus(`[Recording WebM] ${progress}%`);
-    }, 500);
-
-    await new Promise<void>((resolve) => {
-      setTimeout(() => {
-        recorder.stop();
-        if (isPlayingRef.current) {
-          setIsPlaying(false);
-          isPlayingRef.current = false;
-          if (audioRef.current) audioRef.current.pause();
-          if (reqRef.current) cancelAnimationFrame(reqRef.current);
-        }
-        clearInterval(progressInterval);
-        setTimeout(resolve, 500);
-      }, durationToRecord);
-    });
-
-    const videoBlob = new Blob(chunks, { type: mimeType });
-
     try {
+      const canvas = canvasRef.current;
+      if (!canvas) {
+        setIsExporting(false);
+        isExportingRef.current = false;
+        return;
+      }
+
+      if (isPlaying) togglePlay();
+      setCurrentTime(0);
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+      }
+
+      const stream = canvas.captureStream(30);
+      let mimeType = 'video/webm;codecs=vp9';
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = 'video/webm;codecs=vp8';
+      }
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = 'video/webm';
+      }
+      
+      const recorder = new MediaRecorder(stream, { mimeType });
+      const chunks: BlobPart[] = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+
+      const lastNote = parsedData.notes[parsedData.notes.length - 1];
+      const totalDurationMs = lastNote ? lastNote.startTime + lastNote.duration : 0;
+      const durationToRecord = totalDurationMs + 500;
+
+      recorder.start();
+      
+      setIsPlaying(true);
+      isPlayingRef.current = true;
+      startTimeRef.current = performance.now();
+      if (audioRef.current && audioUrl) {
+        audioRef.current.play().catch(console.error);
+      }
+      if (reqRef.current) cancelAnimationFrame(reqRef.current);
+      reqRef.current = requestAnimationFrame(updateFrame);
+
+      const progressInterval = setInterval(() => {
+        const current = audioRef.current ? audioRef.current.currentTime * 1000 : currentTime;
+        const progress = Math.min(100, Math.round((current / durationToRecord) * 100));
+        setExportProgress(progress);
+        setExportStatus(`[Recording WebM] ${progress}%`);
+      }, 500);
+
+      await new Promise<void>((resolve) => {
+        setTimeout(() => {
+          recorder.stop();
+          if (isPlayingRef.current) {
+            setIsPlaying(false);
+            isPlayingRef.current = false;
+            if (audioRef.current) audioRef.current.pause();
+            if (reqRef.current) cancelAnimationFrame(reqRef.current);
+          }
+          clearInterval(progressInterval);
+          setTimeout(resolve, 500);
+        }, durationToRecord);
+      });
+
+      const videoBlob = new Blob(chunks, { type: mimeType });
+
       if (!audioFileRef.current) {
         const url = URL.createObjectURL(videoBlob);
         const a = document.createElement('a');
@@ -1165,9 +1205,13 @@ export default function App() {
         }
         try { await ffmpeg.deleteFile(outputName); } catch(e){}
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Export failed:", err);
-      setFfmpegError(t.conversionFailed + String(err));
+      if (isExportingRef.current) {
+        const errMsg = err?.message || err?.name || String(err);
+        const isOOM = errMsg.includes('memory access out of bounds') || errMsg.includes('RuntimeError') || errMsg.includes('FS error');
+        setFfmpegError(isOOM ? `[Memory/FS Error] ${errMsg}` : errMsg);
+      }
     } finally {
       setIsExporting(false);
       isExportingRef.current = false;
@@ -2182,8 +2226,10 @@ export default function App() {
                 )}
                 
                 {ffmpegError && (
-                  <div className="text-sm text-amber-500/80 text-center">
-                    {ffmpegError}
+                  <div className="text-sm text-red-600 bg-red-50 border border-red-200 p-3 rounded-lg text-left whitespace-pre-wrap break-words w-full mt-2">
+                    <span className="font-bold">{t.exportErrorPrefix}</span>
+                    <br />
+                    <span className="font-mono text-xs">{ffmpegError}</span>
                   </div>
                 )}
               </div>
