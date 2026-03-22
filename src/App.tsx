@@ -69,7 +69,7 @@ const i18n = {
     language: "语言",
     notice: "须知",
     noticeTitle: "使用须知",
-    noticeContent: "针对日语UST做的，什么类型的UST都能用。其它语言的UST理论上也可以用，但嘴型只能用单字覆盖一个个传。需要忽略嘴型设置里的五个元音。\n受性能限制，不建议在移动端浏览器使用。\n可以从bowlroll等地找到各种公开配布的UST文件，发布使用他人UST制作的内容时需要标注原作者。\n有什么问题可以联系我 -> \nB站：UID 487559302\nemail: riciwaaaa@gmail.com\n",
+    noticeContent: "3.22更新：现在可以进入全屏模式直接录屏了，移动端导出失败可以试试这么做。\n\n针对日语UST做的，什么类型的UST都能用。其它语言的UST理论上也可以用，但嘴型只能用单字覆盖一个个传。需要忽略嘴型设置里的五个元音。\n受性能限制，不建议在移动端浏览器使用。\n可以从bowlroll等地找到各种公开配布的UST文件，发布使用他人UST制作的内容时需要标注原作者。\n有什么问题可以联系我 -> \nB站：UID 487559302\nemail: riciwaaaa@gmail.com\n",
     confirm: "确认",
     step1: "嘴型设置",
     step2: "UST/音频/背景图",
@@ -93,7 +93,6 @@ const i18n = {
     exportVideo: "导出视频",
     fullscreenMode: "🖥️ 全屏录制模式 (Fullscreen)",
     fullscreenHint: "点击屏幕或按空格键开始播放",
-    exportErrorPrefix: "导出失败。如屡次遭遇此问题，请截图错误信息私信开发者！\n错误信息: ",
     envWarning: "检测到您正在使用移动端或内置浏览器。由于视频渲染需要耗费大量内存，极易导致崩溃，强烈建议您复制网址到 PC 端浏览器中进行导出操作！",
     longVideoWarning: "检测到视频长度超过5分钟。长视频导出可能会消耗极长的时间和极高的内存，存在崩溃风险。是否继续？",
     webmWarning: "提示：WebM 透明格式将采用【实时录制】方案以防止内存溢出。导出期间请勿切换标签页或最小化浏览器。",
@@ -143,7 +142,7 @@ const i18n = {
     language: "Language",
     notice: "Notice",
     noticeTitle: "Usage Notice",
-    noticeContent: "Designed for Japanese USTs, but any type of UST will work. USTs in other languages can theoretically be used, but mouth shapes must be uploaded one by one using the single-character override feature. You will need to ignore the five basic vowel settings.\nDue to performance limitations, using this tool on mobile browsers is highly not recommended. \nYou can find various publicly distributed UST files on sites like BowlRoll. Please note that when publishing content made using someone else's UST, you must credit the original author.\nIf you have any questions or feedback, feel free to contact me -> \nemail: riciwaaaa@gmail.com",
+    noticeContent: "Mar 22 Update: You can now enter fullscreen mode to record your screen directly. If exporting fails on mobile, you can try this method.\n\nDesigned for Japanese USTs, but any type of UST will work. USTs in other languages can theoretically be used, but mouth shapes must be uploaded one by one using the single-character override feature. You will need to ignore the five basic vowel settings.\nDue to performance limitations, using this tool on mobile browsers is highly not recommended. \nYou can find various publicly distributed UST files on sites like BowlRoll. Please note that when publishing content made using someone else's UST, you must credit the original author.\nIf you have any questions or feedback, feel free to contact me -> \nemail: riciwaaaa@gmail.com",
     confirm: "Confirm",
     step1: "Mouth Shapes",
     step2: "UST / Audio / Background",
@@ -167,7 +166,6 @@ const i18n = {
     exportVideo: "Export Video",
     fullscreenMode: "🖥️ Fullscreen Preview",
     fullscreenHint: "Click or press Space to play",
-    exportErrorPrefix: "Export failed. If this issue persists, please screenshot the error and contact the developer!\nError: ",
     envWarning: "Mobile or in-app browser detected. Video rendering consumes a lot of memory and may crash. It is highly recommended to copy the URL to a PC browser for exporting!",
     longVideoWarning: "Video length exceeds 5 minutes. Exporting long videos may take a very long time and consume high memory, risking a crash. Continue?",
     webmWarning: "Note: WebM format uses real-time recording to prevent memory issues. Please do not switch tabs or minimize the browser during export.",
@@ -217,7 +215,7 @@ const i18n = {
     language: "言語",
     notice: "注意事項",
     noticeTitle: "注意事項",
-    noticeContent: "日本語のUST向けに作られていますが、どの種類のUSTでも使用可能です。他言語のUSTも理論上は使用できますが、口の形は「単字特例（個別の文字の上書き）」機能を使って一つずつアップロードする必要があります。その場合、基本設定の5つの母音は無視してください。\nパフォーマンスの制限により、スマートフォンなどのモバイルブラウザでの使用は推奨していません（PC環境を推奨します）。\nBowlRollなどのサイトで、公開・配布されている様々なUSTファイルを見つけることができます。他の方が作成したUSTを使用して動画などの制作物を公開する際は、必ず原作者のクレジット（お名前）を表記してください。\nご質問や不具合の報告があれば、こちらまでご連絡ください -> \nemail: riciwaaaa@gmail.com",
+    noticeContent: "3月22日更新：フルスクリーンモードに入って直接画面録画ができるようになりました。モバイル端末でエクスポートに失敗する場合は、この方法をお試しください。\n\n日本語のUST向けに作られていますが、どの種類のUSTでも使用可能です。他言語のUSTも理論上は使用できますが、口の形は「単字特例（個別の文字の上書き）」機能を使って一つずつアップロードする必要があります。その場合、基本設定の5つの母音は無視してください。\nパフォーマンスの制限により、スマートフォンなどのモバイルブラウザでの使用は推奨していません（PC環境を推奨します）。\nBowlRollなどのサイトで、公開・配布されている様々なUSTファイルを見つけることができます。他の方が作成したUSTを使用して動画などの制作物を公開する際は、必ず原作者のクレジット（お名前）を表記してください。\nご質問や不具合の報告があれば、こちらまでご連絡ください -> \nemail: riciwaaaa@gmail.com",
     confirm: "確認",
     step1: "口パク設定",
     step2: "UST / 音声 / 背景",
@@ -241,7 +239,6 @@ const i18n = {
     exportVideo: "動画を出力",
     fullscreenMode: "🖥️ フルスクリーン録画 (Fullscreen)",
     fullscreenHint: "画面をクリックするか、スペースキーを押して再生",
-    exportErrorPrefix: "エクスポートに失敗しました。この問題が頻発する場合は、エラー画面のスクリーンショットを開発者にお送りください！\nエラー: ",
     envWarning: "モバイル端末またはアプリ内ブラウザが検出されました。動画のレンダリングには大量のメモリを消費し、クラッシュする可能性が高いため、PCブラウザにURLをコピーしてエクスポートすることを強くお勧めします！",
     longVideoWarning: "動画の長さが5分を超えています。長時間の動画出力は非常に時間がかかり、メモリを大量に消費するため、クラッシュする危険性があります。続行しますか？",
     webmWarning: "注：WebM形式はメモリ不足を防ぐためリアルタイム録画を使用します。エクスポート中はタブを切り替えたり、ブラウザを最小化したりしないでください。",
@@ -575,7 +572,7 @@ export default function App() {
     ctx.drawImage(img, x, y, drawWidth, drawHeight);
   };
   
-  const [exportFormat, setExportFormat] = useState<'webm' | 'mp4' | 'mov' | 'mkv' | 'gif'>('webm');
+  const [exportFormat, setExportFormat] = useState<'webm' | 'mp4' | 'mov' | 'mkv' | 'gif'>('mp4');
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   const ffmpegRef = useRef(new FFmpeg());
@@ -605,6 +602,28 @@ export default function App() {
     };
     loadFFmpeg();
   }, [language]);
+
+  const handleExportError = (err: any) => {
+    console.error("Export failed:", err);
+    if (isExportingRef.current) {
+      const errMsg = err?.message || err?.name || String(err);
+      let userFriendlyMsg = "";
+
+      if (errMsg.includes('mimeType is not supported')) {
+        userFriendlyMsg = "当前浏览器不支持直接导出此格式，请尝试更换导出格式，或使用 Chrome / Edge 浏览器重试。";
+      } else if (errMsg.includes('FS error') || errMsg.includes('No such file')) {
+        userFriendlyMsg = "文件处理异常，可能是因为处理速度过快或缓存出错。请刷新页面后重试。";
+      } else if (errMsg.includes('memory') || errMsg.includes('out of bounds')) {
+        userFriendlyMsg = "设备内存不足。视频渲染需要耗费大量内存，强烈建议关闭其他多余网页，或改用电脑端浏览器进行导出。";
+      } else if (errMsg.includes('SharedArrayBuffer')) {
+        userFriendlyMsg = "您的浏览器环境不支持高性能多线程渲染。请更换为最新的 PC 端 Chrome 或 Edge 浏览器。";
+      } else {
+        userFriendlyMsg = `导出失败，发生异常。请尝试刷新页面、更换导出格式，或使用全屏录制作为备用方案。错误详情：${errMsg}`;
+      }
+
+      setFfmpegError(userFriendlyMsg);
+    }
+  };
 
   const drawCanvas = (mouth: MouthShape, time: number = currentTime, lyric: string = '', isExportingTransparent: boolean = false) => {
     const canvas = canvasRef.current;
@@ -1088,12 +1107,7 @@ export default function App() {
       if (hasAudio) await ffmpeg.deleteFile(`input_audio.${audioExt}`).catch(() => {});
 
     } catch (err: any) {
-      console.error("Export failed:", err);
-      if (isExportingRef.current) {
-        const errMsg = err?.message || err?.name || String(err);
-        const isOOM = errMsg.includes('memory access out of bounds') || errMsg.includes('RuntimeError') || errMsg.includes('FS error');
-        setFfmpegError(isOOM ? `[Memory/FS Error] ${errMsg}` : errMsg);
-      }
+      handleExportError(err);
     } finally {
       // 彻底清理所有帧文件
       try {
@@ -1287,12 +1301,7 @@ export default function App() {
         try { await ffmpeg.deleteFile(outputName); } catch(e){}
       }
     } catch (err: any) {
-      console.error("Export failed:", err);
-      if (isExportingRef.current) {
-        const errMsg = err?.message || err?.name || String(err);
-        const isOOM = errMsg.includes('memory access out of bounds') || errMsg.includes('RuntimeError') || errMsg.includes('FS error');
-        setFfmpegError(isOOM ? `[Memory/FS Error] ${errMsg}` : errMsg);
-      }
+      handleExportError(err);
     } finally {
       setIsExporting(false);
       isExportingRef.current = false;
@@ -2337,8 +2346,6 @@ export default function App() {
                 
                 {ffmpegError && (
                   <div className="text-sm text-red-600 bg-red-50 border border-red-200 p-3 rounded-lg text-left whitespace-pre-wrap break-words w-full mt-2">
-                    <span className="font-bold">{t.exportErrorPrefix}</span>
-                    <br />
                     <span className="font-mono text-xs">{ffmpegError}</span>
                   </div>
                 )}
