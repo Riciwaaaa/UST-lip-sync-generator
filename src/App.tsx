@@ -92,6 +92,7 @@ const i18n = {
     recording: "录制中...",
     exportVideo: "导出视频",
     fullscreenMode: "🖥️ 全屏录制模式 (Fullscreen)",
+    fullscreenHint: "点击屏幕或按空格键开始播放",
     exportErrorPrefix: "导出失败。如屡次遭遇此问题，请截图错误信息私信开发者！\n错误信息: ",
     envWarning: "检测到您正在使用移动端或内置浏览器。由于视频渲染需要耗费大量内存，极易导致崩溃，强烈建议您复制网址到 PC 端浏览器中进行导出操作！",
     longVideoWarning: "检测到视频长度超过5分钟。长视频导出可能会消耗极长的时间和极高的内存，存在崩溃风险。是否继续？",
@@ -165,6 +166,7 @@ const i18n = {
     recording: "Recording...",
     exportVideo: "Export Video",
     fullscreenMode: "🖥️ Fullscreen Preview",
+    fullscreenHint: "Click or press Space to play",
     exportErrorPrefix: "Export failed. If this issue persists, please screenshot the error and contact the developer!\nError: ",
     envWarning: "Mobile or in-app browser detected. Video rendering consumes a lot of memory and may crash. It is highly recommended to copy the URL to a PC browser for exporting!",
     longVideoWarning: "Video length exceeds 5 minutes. Exporting long videos may take a very long time and consume high memory, risking a crash. Continue?",
@@ -238,6 +240,7 @@ const i18n = {
     recording: "録画中...",
     exportVideo: "動画を出力",
     fullscreenMode: "🖥️ フルスクリーン録画 (Fullscreen)",
+    fullscreenHint: "画面をクリックするか、スペースキーを押して再生",
     exportErrorPrefix: "エクスポートに失敗しました。この問題が頻発する場合は、エラー画面のスクリーンショットを開発者にお送りください！\nエラー: ",
     envWarning: "モバイル端末またはアプリ内ブラウザが検出されました。動画のレンダリングには大量のメモリを消費し、クラッシュする可能性が高いため、PCブラウザにURLをコピーしてエクスポートすることを強くお勧めします！",
     longVideoWarning: "動画の長さが5分を超えています。長時間の動画出力は非常に時間がかかり、メモリを大量に消費するため、クラッシュする危険性があります。続行しますか？",
@@ -416,6 +419,8 @@ export default function App() {
 
   const fullscreenContainerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showFullscreenHint, setShowFullscreenHint] = useState(false);
+  const hintTimeoutRef = useRef<number | null>(null);
 
   const [canvasSize, setCanvasSize] = useState({ width: 512, height: 512 });
   const isFirstImageRef = useRef(true);
@@ -822,26 +827,43 @@ export default function App() {
         audioRef.current.currentTime = 0;
       }
       
-      if (!isPlayingRef.current) {
-        setIsPlaying(true);
-        isPlayingRef.current = true;
-        if (audioRef.current && audioUrl) {
-          audioRef.current.play().catch(e => console.error("Audio play failed:", e));
-        } else {
-          startTimeRef.current = performance.now();
-        }
+      // Stop playing if it was playing
+      if (isPlayingRef.current) {
+        setIsPlaying(false);
+        isPlayingRef.current = false;
         if (reqRef.current) cancelAnimationFrame(reqRef.current);
-        reqRef.current = requestAnimationFrame(updateFrame);
-      } else {
-        if (audioRef.current && audioUrl) {
-          // audio is playing, we just set currentTime to 0 above
-        } else {
-          startTimeRef.current = performance.now();
-        }
+        if (audioRef.current) audioRef.current.pause();
       }
+      
+      // Show hint
+      setShowFullscreenHint(true);
+      if (hintTimeoutRef.current) window.clearTimeout(hintTimeoutRef.current);
+      hintTimeoutRef.current = window.setTimeout(() => {
+        setShowFullscreenHint(false);
+      }, 2000);
+      
+      // Focus the container so it can receive keyboard events
+      fullscreenContainerRef.current.focus();
+
     } catch (err) {
       console.error("Error attempting to enable full-screen mode:", err);
       alert("无法进入全屏模式 / Cannot enter fullscreen mode");
+    }
+  };
+
+  const handleFullscreenInteraction = (e: React.MouseEvent | React.KeyboardEvent) => {
+    if (!isFullscreen) return;
+    
+    if (e.type === 'keydown') {
+      const keyEvent = e as React.KeyboardEvent;
+      if (keyEvent.code === 'Space') {
+        keyEvent.preventDefault();
+        togglePlay();
+        setShowFullscreenHint(false);
+      }
+    } else if (e.type === 'click') {
+      togglePlay();
+      setShowFullscreenHint(false);
     }
   };
 
@@ -2167,19 +2189,28 @@ export default function App() {
               <div className="relative w-full max-w-2xl aspect-video rounded-3xl border-4 border-zinc-200 bg-white shadow-2xl overflow-hidden flex items-center justify-center bg-checkered">
                 <div 
                   ref={fullscreenContainerRef} 
-                  className={`w-full h-full flex items-center justify-center ${isFullscreen ? 'bg-black' : ''}`}
+                  className={`w-full h-full flex items-center justify-center focus:outline-none ${isFullscreen ? 'bg-black cursor-pointer' : ''}`}
                   style={isFullscreen && backgroundColor ? { backgroundColor } : {}}
+                  tabIndex={isFullscreen ? 0 : -1}
+                  onClick={isFullscreen ? handleFullscreenInteraction : undefined}
+                  onKeyDown={isFullscreen ? handleFullscreenInteraction : undefined}
                 >
                   <canvas 
                     ref={canvasRef} 
                     width={canvasSize.width} 
                     height={canvasSize.height} 
-                    className="w-full h-full object-contain"
+                    className="w-full h-full object-contain pointer-events-none"
                   />
+                  
+                  {isFullscreen && (
+                    <div className={`absolute bottom-12 left-1/2 -translate-x-1/2 px-6 py-3 bg-black/60 text-white text-sm rounded-full backdrop-blur-md transition-opacity duration-500 pointer-events-none ${showFullscreenHint ? 'opacity-100' : 'opacity-0'}`}>
+                      {t.fullscreenHint}
+                    </div>
+                  )}
                 </div>
                 
                 {!isFullscreen && (
-                  <div className="absolute top-4 right-4 px-3 py-1 rounded-full bg-white/50 backdrop-blur-md border border-black/10 text-xs font-mono text-black/80 z-10">
+                  <div className="absolute top-4 right-4 px-3 py-1 rounded-full bg-white/50 backdrop-blur-md border border-black/10 text-xs font-mono text-black/80 z-10 pointer-events-none">
                     {currentMouth} | {canvasSize.width}x{canvasSize.height}
                   </div>
                 )}
