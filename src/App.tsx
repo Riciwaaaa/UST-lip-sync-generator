@@ -91,6 +91,7 @@ const i18n = {
     exporting: "转换中",
     recording: "录制中...",
     exportVideo: "导出视频",
+    fullscreenMode: "🖥️ 全屏录制模式 (Fullscreen)",
     exportErrorPrefix: "导出失败。如屡次遭遇此问题，请截图错误信息私信开发者！\n错误信息: ",
     envWarning: "检测到您正在使用移动端或内置浏览器。由于视频渲染需要耗费大量内存，极易导致崩溃，强烈建议您复制网址到 PC 端浏览器中进行导出操作！",
     longVideoWarning: "检测到视频长度超过5分钟。长视频导出可能会消耗极长的时间和极高的内存，存在崩溃风险。是否继续？",
@@ -163,6 +164,7 @@ const i18n = {
     exporting: "Converting",
     recording: "Recording...",
     exportVideo: "Export Video",
+    fullscreenMode: "🖥️ Fullscreen Preview",
     exportErrorPrefix: "Export failed. If this issue persists, please screenshot the error and contact the developer!\nError: ",
     envWarning: "Mobile or in-app browser detected. Video rendering consumes a lot of memory and may crash. It is highly recommended to copy the URL to a PC browser for exporting!",
     longVideoWarning: "Video length exceeds 5 minutes. Exporting long videos may take a very long time and consume high memory, risking a crash. Continue?",
@@ -235,6 +237,7 @@ const i18n = {
     exporting: "変換中",
     recording: "録画中...",
     exportVideo: "動画を出力",
+    fullscreenMode: "🖥️ フルスクリーン録画 (Fullscreen)",
     exportErrorPrefix: "エクスポートに失敗しました。この問題が頻発する場合は、エラー画面のスクリーンショットを開発者にお送りください！\nエラー: ",
     envWarning: "モバイル端末またはアプリ内ブラウザが検出されました。動画のレンダリングには大量のメモリを消費し、クラッシュする可能性が高いため、PCブラウザにURLをコピーしてエクスポートすることを強くお勧めします！",
     longVideoWarning: "動画の長さが5分を超えています。長時間の動画出力は非常に時間がかかり、メモリを大量に消費するため、クラッシュする危険性があります。続行しますか？",
@@ -411,6 +414,9 @@ export default function App() {
   const overrideImageElementsRef = useRef<Record<string, HTMLImageElement | null>>({});
   const overrideGifFramesRef = useRef<Record<string, GifFrame[] | null>>({});
 
+  const fullscreenContainerRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
   const [canvasSize, setCanvasSize] = useState({ width: 512, height: 512 });
   const isFirstImageRef = useRef(true);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -463,6 +469,23 @@ export default function App() {
       trackedUrlsRef.current.delete(url);
     }
   };
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const isFS = !!document.fullscreenElement;
+      setIsFullscreen(isFS);
+      if (!isFS) {
+        if (isPlayingRef.current) {
+          setIsPlaying(false);
+          isPlayingRef.current = false;
+          if (reqRef.current) cancelAnimationFrame(reqRef.current);
+          if (audioRef.current) audioRef.current.pause();
+        }
+      }
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   useEffect(() => {
     audioOffsetRef.current = audioOffset;
@@ -729,6 +752,9 @@ export default function App() {
       if (audioRef.current) {
         audioRef.current.pause();
       }
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(console.error);
+      }
       return;
     }
 
@@ -783,6 +809,39 @@ export default function App() {
       
       if (reqRef.current) cancelAnimationFrame(reqRef.current);
       reqRef.current = requestAnimationFrame(updateFrame);
+    }
+  };
+
+  const handleFullscreenPreview = async () => {
+    if (!fullscreenContainerRef.current) return;
+    try {
+      await fullscreenContainerRef.current.requestFullscreen();
+      
+      setCurrentTime(0);
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+      }
+      
+      if (!isPlayingRef.current) {
+        setIsPlaying(true);
+        isPlayingRef.current = true;
+        if (audioRef.current && audioUrl) {
+          audioRef.current.play().catch(e => console.error("Audio play failed:", e));
+        } else {
+          startTimeRef.current = performance.now();
+        }
+        if (reqRef.current) cancelAnimationFrame(reqRef.current);
+        reqRef.current = requestAnimationFrame(updateFrame);
+      } else {
+        if (audioRef.current && audioUrl) {
+          // audio is playing, we just set currentTime to 0 above
+        } else {
+          startTimeRef.current = performance.now();
+        }
+      }
+    } catch (err) {
+      console.error("Error attempting to enable full-screen mode:", err);
+      alert("无法进入全屏模式 / Cannot enter fullscreen mode");
     }
   };
 
@@ -2106,16 +2165,24 @@ export default function App() {
             <div className="flex flex-col items-center space-y-8">
               {/* Canvas Container */}
               <div className="relative w-full max-w-2xl aspect-video rounded-3xl border-4 border-zinc-200 bg-white shadow-2xl overflow-hidden flex items-center justify-center bg-checkered">
-                <canvas 
-                  ref={canvasRef} 
-                  width={canvasSize.width} 
-                  height={canvasSize.height} 
-                  className="w-full h-full object-contain"
-                />
-                
-                <div className="absolute top-4 right-4 px-3 py-1 rounded-full bg-white/50 backdrop-blur-md border border-black/10 text-xs font-mono text-black/80 z-10">
-                  {currentMouth} | {canvasSize.width}x{canvasSize.height}
+                <div 
+                  ref={fullscreenContainerRef} 
+                  className={`w-full h-full flex items-center justify-center ${isFullscreen ? 'bg-black' : ''}`}
+                  style={isFullscreen && backgroundColor ? { backgroundColor } : {}}
+                >
+                  <canvas 
+                    ref={canvasRef} 
+                    width={canvasSize.width} 
+                    height={canvasSize.height} 
+                    className="w-full h-full object-contain"
+                  />
                 </div>
+                
+                {!isFullscreen && (
+                  <div className="absolute top-4 right-4 px-3 py-1 rounded-full bg-white/50 backdrop-blur-md border border-black/10 text-xs font-mono text-black/80 z-10">
+                    {currentMouth} | {canvasSize.width}x{canvasSize.height}
+                  </div>
+                )}
               </div>
 
               {/* Controls */}
@@ -2184,6 +2251,18 @@ export default function App() {
                   </button>
                   
                   <div className="flex items-center space-x-2">
+                    <button
+                      onClick={handleFullscreenPreview}
+                      disabled={isExporting}
+                      className={`flex items-center justify-center w-14 h-14 rounded-xl font-medium shadow-lg transition-all active:scale-95 border
+                        ${isExporting
+                          ? 'bg-zinc-100/50 text-zinc-400 border-zinc-200 cursor-not-allowed'
+                          : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-800 border-zinc-300'}`}
+                      title={t.fullscreenMode}
+                    >
+                      <span className="text-2xl leading-none -mt-1">⛶</span>
+                    </button>
+
                     <select 
                       value={exportFormat} 
                       onChange={(e) => setExportFormat(e.target.value as any)}
