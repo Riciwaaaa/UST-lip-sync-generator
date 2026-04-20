@@ -2098,7 +2098,7 @@ export default function App() {
       )}
 
       {/* Mobile Absolute Language & Theme Buttons */}
-      <div className="fixed top-4 right-4 z-50 portrait:flex landscape:hidden w-auto items-center space-x-2">
+      <div className="fixed top-4 right-4 z-50 portrait:flex landscape:hidden flex-col items-end space-y-3">
         <button 
           onClick={toggleDarkMode} 
           className="p-2 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm shadow-md border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-full transition-all"
@@ -2202,12 +2202,12 @@ export default function App() {
           {/* Inner wrapper for RTL to LTR trick */}
           <div className="w-full h-max landscape:[direction:ltr] portrait:p-4 landscape:p-8 portrait:space-y-6 landscape:space-y-12">
             
-            {/* Header */}
-          <header className="space-y-3 text-center portrait:hidden landscape:block">
-            <h1 className="text-3xl xl:text-4xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
+            {/* Big Title Header */}
+          <header className="space-y-1 landscape:space-y-3 text-center mt-4 landscape:mt-0">
+            <h1 className="text-[clamp(1.5rem,6vw,2.25rem)] xl:text-4xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50 leading-tight px-4">
               {t.title}
             </h1>
-            <p className="text-base xl:text-lg text-zinc-600 dark:text-zinc-400">
+            <p className="text-[clamp(0.875rem,3.5vw,1rem)] xl:text-lg text-zinc-600 dark:text-zinc-400 px-4">
               {t.subtitle}
             </p>
           </header>
