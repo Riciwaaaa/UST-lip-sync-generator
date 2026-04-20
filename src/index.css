@@ -32,25 +32,12 @@
       linear-gradient(-45deg, transparent 75%, var(--color-zinc-800, #454353) 75%);
   }
 
+  .custom-scrollbar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none;    /* Firefox */
+  }
+  
   .custom-scrollbar::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-  .custom-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: var(--color-zinc-300, #d4d4d8);
-    border-radius: 4px;
-  }
-  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: var(--color-zinc-400, #a1a1aa);
-  }
-
-  .dark .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: var(--color-zinc-600, #67657a);
-  }
-  .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: var(--color-zinc-500, #838099);
+    display: none; /* Chrome, Safari and Opera */
   }
 }

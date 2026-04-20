@@ -503,7 +503,7 @@ export default function App() {
   // ------------------------------------------------------------------------
   // 新增：响应式与面板拖拽状态 (Resizable Divider)
   // ------------------------------------------------------------------------
-  const [panelRatio, setPanelRatio] = useState(45); // 默认比例
+  const [panelRatio, setPanelRatio] = useState(60); // 默认比例 6:4 (60% left, 40% right)
   const [isDraggingDivider, setIsDraggingDivider] = useState(false);
   const mainContainerRef = useRef<HTMLDivElement>(null);
   const [isPortraitTheme, setIsPortraitTheme] = useState(false);
@@ -2618,19 +2618,20 @@ export default function App() {
 
         {/* Resizable Divider */}
         <div
-          className="group flex flex-none items-center justify-center relative touch-none z-10
-                     portrait:w-full portrait:h-4 portrait:cursor-row-resize portrait:-mt-2 portrait:mb-2
-                     landscape:w-4 landscape:h-full landscape:cursor-col-resize landscape:-ml-2 landscape:mr-2"
+          className="group flex flex-none shrink-0 items-center justify-center relative touch-none z-10
+                     portrait:w-full portrait:h-1 portrait:cursor-row-resize 
+                     landscape:w-1 landscape:h-full landscape:cursor-col-resize 
+                     bg-zinc-200 dark:bg-zinc-700
+                     hover:bg-indigo-400 dark:hover:bg-indigo-500 active:bg-indigo-500 dark:active:bg-indigo-600 transition-colors duration-200"
           onMouseDown={() => setIsDraggingDivider(true)}
           onTouchStart={() => setIsDraggingDivider(true)}
         >
-          <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-200 ${isDraggingDivider ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-            {/* Hotspot / Visual line */}
-            <div className="absolute portrait:w-full portrait:h-1 portrait:top-1.5 landscape:top-0 landscape:w-1 landscape:h-full landscape:left-1.5 bg-indigo-400 dark:bg-indigo-500/80 group-active:bg-indigo-500 dark:group-active:bg-indigo-600 transition-colors" />
-            {/* Handle icon */}
-            <div className="absolute bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-full flex items-center justify-center shadow-md text-indigo-500 dark:text-indigo-400 portrait:w-8 portrait:h-3 landscape:w-3 landscape:h-8">
-              <span className="portrait:rotate-90 text-[10px] leading-none mb-0.5">⋮</span>
-            </div>
+          {/* Extended invisible wrapper for easier grabbing (the hotspot) */}
+          <div className="absolute portrait:w-full portrait:-top-2 portrait:-bottom-2 landscape:h-full landscape:-left-2 landscape:-right-2 z-0" />
+          
+          {/* Handle icon */}
+          <div className="absolute bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-full flex items-center justify-center shadow-sm text-zinc-400 dark:text-zinc-500 group-hover:text-white dark:group-hover:text-white group-hover:bg-indigo-400 dark:group-hover:bg-indigo-500 group-hover:border-transparent portrait:w-8 portrait:h-3 landscape:w-3 landscape:h-8 z-10 transition-all pointer-events-none">
+            <span className="portrait:rotate-90 text-[10px] leading-none mb-0.5">⋮</span>
           </div>
         </div>
 
