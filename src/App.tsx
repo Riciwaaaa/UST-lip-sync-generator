@@ -1,19 +1,20 @@
 import React, { useState, useRef, useEffect, DragEvent, ChangeEvent } from 'react';
-import { UploadCloud, FileText, AlertCircle, Clock, Music, Play, Pause, Image as ImageIcon, Video, Download, Settings, Layers, X, Globe } from 'lucide-react';
+import { UploadCloud, FileText, AlertCircle, Clock, Music, Play, Pause, Image as ImageIcon, Video, Download, Settings, Layers, X, Globe, Sun, Moon } from 'lucide-react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 import coreURL from '@ffmpeg/core?url';
 import wasmURL from '@ffmpeg/core/wasm?url';
 import { parseGIF, decompressFrames } from 'gifuct-js';
+import yaml from 'js-yaml';
 import { DragDropWrapper } from './components/DragDropWrapper';
 
 interface NoteData {
-  index: string;
+  index: number;
   originalLyric: string;
-  cleanedLyric: string;
+  lyric: string;
   length: number;
-  startTime: number;
-  duration: number;
+  startTimeMs: number;
+  durationMs: number;
 }
 
 interface ParsedUst {
@@ -65,11 +66,11 @@ type Language = 'zh' | 'en' | 'ja';
 const i18n = {
   zh: {
     title: "UST口型动画生成器",
-    subtitle: "基于UST文件生成口型动画的工具",
+    subtitle: "支持UST/USTX/VSQX文件",
     language: "语言",
     notice: "须知",
     noticeTitle: "使用须知",
-    noticeContent: "3.22更新：现在可以进入全屏模式直接录屏了，移动端导出失败可以试试这么做。\n\n针对日语UST做的，什么类型的UST都能用。其它语言的UST理论上也可以用，但嘴型只能用单字覆盖一个个传。需要忽略嘴型设置里的五个元音。\n受性能限制，不建议在移动端浏览器使用。\n可以从bowlroll等地找到各种公开配布的UST文件，发布使用他人UST制作的内容时需要标注原作者。\n有什么问题可以联系我 -> \nB站：UID 487559302\nemail: riciwaaaa@gmail.com\n",
+    noticeContent: "26/4/19更新：现在也支持导入ustx/vsqx文件了！另外还做了一点ui优化。\n26/3/22更新：现在可以进入全屏模式直接录屏了，移动端导出失败可以试试这么做。\n\n针对日语UST做的，什么类型的UST都能用。其它语言的UST理论上也可以用，但嘴型只能用单字覆盖一个个传。需要忽略嘴型设置里的五个元音。\n受性能限制，不建议在移动端浏览器使用。\n可以从bowlroll等地找到各种公开配布的UST文件，发布使用他人UST制作的内容时需要标注原作者。\n有什么问题可以联系我 -> \nB站：UID 487559302\nemail: riciwaaaa@gmail.com\n",
     confirm: "确认",
     step1: "嘴型设置",
     step2: "UST/音频/背景图",
@@ -120,12 +121,16 @@ const i18n = {
     gifParseFailed: "GIF 解析失败",
     parseError: "解析文件时发生错误，请检查文件格式。",
     fileReadError: "文件读取失败",
-    invalidUst: "请上传有效的 .ust 文件",
+    invalidUst: "请上传有效的 .ust, .ustx 或 .vsqx 文件",
+    selectTrack: "选择要导入的轨道",
+    selectTrackDesc: "检测到工程中包含多条轨道，请选择要导入的主轨道：",
     parsedData: "解析数据 ({count} notes)",
     index: "序号",
     originalLyric: "原始歌词",
-    cleanedLyric: "清洗后歌词",
-    mappedMouth: "映射嘴型",
+    lyric: "歌词",
+    mappedMouth: "口型映射",
+    startTimeMsFormatted: "开始时间",
+    startTimeMsRaw: "开始时间 (ms)",
     webmDesc: "WebM (支持透明)",
     mp4Desc: "MP4 (H.264)",
     movDesc: "MOV (H.264)",
@@ -138,17 +143,17 @@ const i18n = {
   },
   en: {
     title: "UST Lip Sync Generator",
-    subtitle: "Generate lip sync animations based on UST files",
+    subtitle: "Supports UST/USTX/VSQX files",
     language: "Language",
     notice: "Notice",
     noticeTitle: "Usage Notice",
-    noticeContent: "Mar 22 Update: You can now enter fullscreen mode to record your screen directly. If exporting fails on mobile, you can try this method.\n\nDesigned for Japanese USTs, but any type of UST will work. USTs in other languages can theoretically be used, but mouth shapes must be uploaded one by one using the single-character override feature. You will need to ignore the five basic vowel settings.\nDue to performance limitations, using this tool on mobile browsers is highly not recommended. \nYou can find various publicly distributed UST files on sites like BowlRoll. Please note that when publishing content made using someone else's UST, you must credit the original author.\nIf you have any questions or feedback, feel free to contact me -> \nemail: riciwaaaa@gmail.com",
+    noticeContent: "26/4/19 Update: Now supports importing .ustx and .vsqx files! We've also made a few UI improvements.\n26/3/22 Update: You can now enter fullscreen mode to record your screen directly. If exporting fails on mobile, you can try this method.\n\nDesigned for Japanese USTs, but any type of UST will work. USTs in other languages can theoretically be used, but mouth shapes must be uploaded one by one using the single-character override feature. You will need to ignore the five basic vowel settings.\nDue to performance limitations, using this tool on mobile browsers is highly not recommended. \nYou can find various publicly distributed UST files on sites like BowlRoll. Please note that when publishing content made using someone else's UST, you must credit the original author.\nIf you have any questions or feedback, feel free to contact me -> \nemail: riciwaaaa@gmail.com",
     confirm: "Confirm",
     step1: "Mouth Shapes",
-    step2: "UST / Audio / Background",
+    step2: "UST(X) / Audio / Background",
     step3: "Monitor & Export",
-    uploadUst: "Import .ust File",
-    uploadUstDesc: "Generate timeline",
+    uploadUst: "Import Project",
+    uploadUstDesc: ".ust / .ustx / .vsqx",
     uploadAudio: "Import Audio (Optional)",
     audioUploaded: "Audio Imported",
     uploadAudioDesc: "Sync playback & export",
@@ -193,12 +198,16 @@ const i18n = {
     gifParseFailed: "Failed to parse GIF",
     parseError: "Error parsing file, please check the format.",
     fileReadError: "Failed to read file",
-    invalidUst: "Please upload a valid .ust file",
+    invalidUst: "Please upload a valid .ust, .ustx or .vsqx file",
+    selectTrack: "Select Track to Import",
+    selectTrackDesc: "Multiple tracks detected. Please select the main track to import:",
     parsedData: "Parsed Data ({count} notes)",
     index: "Index",
     originalLyric: "Original Lyric",
-    cleanedLyric: "Cleaned Lyric",
+    lyric: "Lyric",
     mappedMouth: "Mapped Mouth",
+    startTimeMsFormatted: "Start Time",
+    startTimeMsRaw: "Start Time (ms)",
     webmDesc: "WebM (Supports Transparency)",
     mp4Desc: "MP4 (H.264)",
     movDesc: "MOV (H.264)",
@@ -211,17 +220,17 @@ const i18n = {
   },
   ja: {
     title: "USTリップシンクジェネレーター",
-    subtitle: "USTファイルからリップシンクアニメーションを生成するツール",
+    subtitle: "UST/USTX/VSQXファイルに対応",
     language: "言語",
     notice: "注意事項",
     noticeTitle: "注意事項",
-    noticeContent: "3月22日更新：フルスクリーンモードに入って直接画面録画ができるようになりました。モバイル端末でエクスポートに失敗する場合は、この方法をお試しください。\n\n日本語のUST向けに作られていますが、どの種類のUSTでも使用可能です。他言語のUSTも理論上は使用できますが、口の形は「単字特例（個別の文字の上書き）」機能を使って一つずつアップロードする必要があります。その場合、基本設定の5つの母音は無視してください。\nパフォーマンスの制限により、スマートフォンなどのモバイルブラウザでの使用は推奨していません（PC環境を推奨します）。\nBowlRollなどのサイトで、公開・配布されている様々なUSTファイルを見つけることができます。他の方が作成したUSTを使用して動画などの制作物を公開する際は、必ず原作者のクレジット（お名前）を表記してください。\nご質問や不具合の報告があれば、こちらまでご連絡ください -> \nemail: riciwaaaa@gmail.com",
+    noticeContent: "26/4/19 アップデート: 新たに .ustx および .vsqx ファイルのインポートに対応しました！また、UIも少し使いやすく改善しています。/n26/3/22 アップデート: フルスクリーンモードに入って直接画面録画ができるようになりました。モバイル端末でエクスポートに失敗する場合は、この方法をお試しください。\n\n日本語のUST向けに作られていますが、どの種類のUSTでも使用可能です。他言語のUSTも理論上は使用できますが、口の形は「単字特例（個別の文字の上書き）」機能を使って一つずつアップロードする必要があります。その場合、基本設定の5つの母音は無視してください。\nパフォーマンスの制限により、スマートフォンなどのモバイルブラウザでの使用は推奨していません（PC環境を推奨します）。\nBowlRollなどのサイトで、公開・配布されている様々なUSTファイルを見つけることができます。他の方が作成したUSTを使用して動画などの制作物を公開する際は、必ず原作者のクレジット（お名前）を表記してください。\nご質問や不具合の報告があれば、こちらまでご連絡ください -> \nemail: riciwaaaa@gmail.com",
     confirm: "確認",
     step1: "口パク設定",
-    step2: "UST / 音声 / 背景",
+    step2: "UST(X) / 音声 / 背景",
     step3: "モニターと出力",
-    uploadUst: "USTファイルをインポート",
-    uploadUstDesc: "タイムラインを生成",
+    uploadUst: "プロジェクトをインポート",
+    uploadUstDesc: ".ust / .ustx / .vsqx",
     uploadAudio: "音声をインポート (任意)",
     audioUploaded: "音声インポート済み",
     uploadAudioDesc: "同期再生と出力",
@@ -266,12 +275,16 @@ const i18n = {
     gifParseFailed: "GIFの解析に失敗しました",
     parseError: "ファイルの解析中にエラーが発生しました。フォーマットを確認してください。",
     fileReadError: "ファイルの読み込みに失敗しました",
-    invalidUst: "有効な.ustファイルをアップロードしてください",
+    invalidUst: "有効な .ust, .ustx または .vsqx ファイルをアップロードしてください",
+    selectTrack: "インポートするトラックを選択",
+    selectTrackDesc: "複数のトラックが検出されました。インポートするメイントラックを選択してください：",
     parsedData: "解析データ ({count} notes)",
     index: "番号",
     originalLyric: "元の歌詞",
-    cleanedLyric: "クリーンアップ後",
+    lyric: "歌詞",
     mappedMouth: "割り当てられた口の形",
+    startTimeMsFormatted: "開始時間",
+    startTimeMsRaw: "開始時間 (ms)",
     webmDesc: "WebM (透過対応)",
     mp4Desc: "MP4 (H.264)",
     movDesc: "MOV (H.264)",
@@ -382,6 +395,36 @@ export default function App() {
   const [language, setLanguage] = useState<Language>('zh');
   const [showModal, setShowModal] = useState(false);
 
+  // ------------------------------------------------------------------------
+  // 新增：深色/浅色模式 (Dark/Light Mode)
+  // ------------------------------------------------------------------------
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('theme');
+      if (saved) return saved === 'dark';
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [isDarkMode]);
+
+  const toggleDarkMode = () => setIsDarkMode(prev => !prev);
+  // ------------------------------------------------------------------------
+
+  const [ustxData, setUstxData] = useState<any>(null);
+  const [vsqxData, setVsqxData] = useState<{ bpm: number, resolution: number } | null>(null);
+  const [trackOptions, setTrackOptions] = useState<{ id: number, name: string, notesCount: number, part: any, format: 'ustx'|'vsqx' }[]>([]);
+  const [showTrackSelector, setShowTrackSelector] = useState(false);
+
   useEffect(() => {
     const hasSeenNotice = localStorage.getItem('hasSeenNotice');
     if (!hasSeenNotice || hasSeenNotice === 'false') {
@@ -429,7 +472,7 @@ export default function App() {
   const [currentMouth, setCurrentMouth] = useState<MouthShape>('default');
   
   const reqRef = useRef<number | null>(null);
-  const startTimeRef = useRef<number>(0);
+  const startTimeMsRef = useRef<number>(0);
 
   // 录制状态
   const [exportStatus, setExportStatus] = useState('');
@@ -456,6 +499,61 @@ export default function App() {
   const [audioOffset, setAudioOffset] = useState<number>(0);
   const audioOffsetRef = useRef<number>(0);
   const trackedUrlsRef = useRef<Set<string>>(new Set());
+
+  // ------------------------------------------------------------------------
+  // 新增：响应式与面板拖拽状态 (Resizable Divider)
+  // ------------------------------------------------------------------------
+  const [panelRatio, setPanelRatio] = useState(45); // 默认比例
+  const [isDraggingDivider, setIsDraggingDivider] = useState(false);
+  const mainContainerRef = useRef<HTMLDivElement>(null);
+  const [isPortraitTheme, setIsPortraitTheme] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => setIsPortraitTheme(window.innerHeight >= window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    handleResize(); // 初始校验
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (!isDraggingDivider) return;
+
+    const handleMove = (e: MouseEvent | TouchEvent) => {
+      // 移动端拖拽时不希望页面滚动
+      if (e.cancelable && e.type === 'touchmove') e.preventDefault();
+      
+      if (!mainContainerRef.current) return;
+      const rect = mainContainerRef.current.getBoundingClientRect();
+      
+      let clientX = 'touches' in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
+      let clientY = 'touches' in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
+
+      let newRatio;
+      if (isPortraitTheme) {
+        newRatio = ((clientY - rect.top) / rect.height) * 100;
+      } else {
+        newRatio = ((clientX - rect.left) / rect.width) * 100;
+      }
+
+      newRatio = Math.max(20, Math.min(80, newRatio)); // 限制在 20% - 80% 之间
+      setPanelRatio(newRatio);
+    };
+
+    const handleEnd = () => setIsDraggingDivider(false);
+
+    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('touchmove', handleMove, { passive: false });
+    document.addEventListener('mouseup', handleEnd);
+    document.addEventListener('touchend', handleEnd);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMove);
+      document.removeEventListener('touchmove', handleMove);
+      document.removeEventListener('mouseup', handleEnd);
+      document.removeEventListener('touchend', handleEnd);
+    };
+  }, [isDraggingDivider, isPortraitTheme]);
+  // ------------------------------------------------------------------------
 
   // 辅助函数：创建并追踪 ObjectURL
   const createTrackedURL = (file: Blob) => {
@@ -693,13 +791,13 @@ export default function App() {
     let localTime = time;
     const parsedData = parsedDataRef.current;
     if (parsedData) {
-      const activeNote = parsedData.notes.find(n => time >= n.startTime && time < n.startTime + n.duration);
+      const activeNote = parsedData.notes.find(n => time >= n.startTimeMs && time < n.startTimeMs + n.durationMs);
       if (activeNote) {
-        localTime = time - activeNote.startTime;
+        localTime = time - activeNote.startTimeMs;
       } else {
         let prevNoteEndTime = 0;
         for (let i = parsedData.notes.length - 1; i >= 0; i--) {
-          const noteEnd = parsedData.notes[i].startTime + parsedData.notes[i].duration;
+          const noteEnd = parsedData.notes[i].startTimeMs + parsedData.notes[i].durationMs;
           if (noteEnd <= time) {
             prevNoteEndTime = noteEnd;
             break;
@@ -744,8 +842,8 @@ export default function App() {
   // 静态时更新画布
   useEffect(() => {
     if (!isPlaying) {
-      const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTime && currentTime < n.startTime + n.duration);
-      drawCanvas(currentMouth, currentTime, currentNote ? currentNote.cleanedLyric : '');
+      const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTimeMs && currentTime < n.startTimeMs + n.durationMs);
+      drawCanvas(currentMouth, currentTime, currentNote ? currentNote.lyric : '');
     }
   }, [canvasSize, currentMouth, isPlaying, currentTime, mouthImages, overrideImages]);
 
@@ -758,13 +856,13 @@ export default function App() {
       newTime = audioRef.current.currentTime * 1000;
     } else {
       const now = performance.now();
-      newTime = now - startTimeRef.current;
+      newTime = now - startTimeMsRef.current;
     }
     
     if (newTime < 0) newTime = 0;
     
     const lastNote = data.notes[data.notes.length - 1];
-    const totalDuration = lastNote ? lastNote.startTime + lastNote.duration : 0;
+    const totalDuration = lastNote ? lastNote.startTimeMs + lastNote.durationMs : 0;
 
     if (newTime >= totalDuration) {
       setIsPlaying(false);
@@ -791,18 +889,18 @@ export default function App() {
     while (l <= r) {
       const m = Math.floor((l + r) / 2);
       const note = data.notes[m];
-      if (visualTime >= note.startTime && visualTime < note.startTime + note.duration) {
+      if (visualTime >= note.startTimeMs && visualTime < note.startTimeMs + note.durationMs) {
         activeNote = note;
         break;
-      } else if (visualTime < note.startTime) {
+      } else if (visualTime < note.startTimeMs) {
         r = m - 1;
       } else {
         l = m + 1;
       }
     }
 
-    const mouth = activeNote ? getMouthShape(activeNote.cleanedLyric) : 'default';
-    const lyric = activeNote ? activeNote.cleanedLyric : '';
+    const mouth = activeNote ? getMouthShape(activeNote.lyric) : 'default';
+    const lyric = activeNote ? activeNote.lyric : '';
     setCurrentMouth(mouth);
     const isTransparent = isExportingRef.current && (exportFormat === 'webm' || exportFormat === 'gif');
     drawCanvas(mouth, visualTime, lyric, isTransparent);
@@ -828,7 +926,7 @@ export default function App() {
         audioRef.current.currentTime = currentTime / 1000;
         audioRef.current.play().catch(e => console.error("Audio play failed:", e));
       } else {
-        startTimeRef.current = performance.now() - currentTime;
+        startTimeMsRef.current = performance.now() - currentTime;
       }
       
       if (reqRef.current) cancelAnimationFrame(reqRef.current);
@@ -896,7 +994,7 @@ export default function App() {
     
     if (isPlayingRef.current) {
       if (!audioUrl) {
-        startTimeRef.current = performance.now() - time;
+        startTimeMsRef.current = performance.now() - time;
       }
     } else {
       // 静态更新画布
@@ -908,17 +1006,17 @@ export default function App() {
         while (l <= r) {
           const m = Math.floor((l + r) / 2);
           const note = data.notes[m];
-          if (visualTime >= note.startTime && visualTime < note.startTime + note.duration) {
+          if (visualTime >= note.startTimeMs && visualTime < note.startTimeMs + note.durationMs) {
             activeNote = note;
             break;
-          } else if (visualTime < note.startTime) {
+          } else if (visualTime < note.startTimeMs) {
             r = m - 1;
           } else {
             l = m + 1;
           }
         }
-        const mouth = activeNote ? getMouthShape(activeNote.cleanedLyric) : 'default';
-        const lyric = activeNote ? activeNote.cleanedLyric : '';
+        const mouth = activeNote ? getMouthShape(activeNote.lyric) : 'default';
+        const lyric = activeNote ? activeNote.lyric : '';
         setCurrentMouth(mouth);
         drawCanvas(mouth, visualTime, lyric);
       } else {
@@ -943,8 +1041,8 @@ export default function App() {
     try {
       const ffmpeg = ffmpegRef.current;
       const totalDuration = parsedDataRef.current.notes.length > 0
-        ? parsedDataRef.current.notes[parsedDataRef.current.notes.length - 1].startTime +
-          parsedDataRef.current.notes[parsedDataRef.current.notes.length - 1].duration
+        ? parsedDataRef.current.notes[parsedDataRef.current.notes.length - 1].startTimeMs +
+          parsedDataRef.current.notes[parsedDataRef.current.notes.length - 1].durationMs
         : 0;
 
       if (totalDuration === 0) throw new Error("No notes to export");
@@ -965,7 +1063,7 @@ export default function App() {
       const targetCtx = targetCanvas.getContext('2d');
       if (!targetCtx) throw new Error("Could not get 2d context for export");
 
-      const startTime = performance.now();
+      const startTimeMs = performance.now();
       const SEGMENT_SIZE = isTransparent ? totalFrames : 600; // Do not segment GIF to preserve transparency easily
       const segmentFiles: string[] = [];
 
@@ -981,10 +1079,10 @@ export default function App() {
           let mouth: MouthShape = 'default';
           let lyric = '';
           
-          const activeNote = parsedDataRef.current.notes.find(n => visualTime >= n.startTime && visualTime < n.startTime + n.duration);
+          const activeNote = parsedDataRef.current.notes.find(n => visualTime >= n.startTimeMs && visualTime < n.startTimeMs + n.durationMs);
           if (activeNote) {
-            mouth = getMouthShape(activeNote.cleanedLyric);
-            lyric = activeNote.cleanedLyric;
+            mouth = getMouthShape(activeNote.lyric);
+            lyric = activeNote.lyric;
           }
 
           drawCanvas(mouth, visualTime, lyric, isTransparent); // Skip background if transparent
@@ -1012,7 +1110,7 @@ export default function App() {
           }
 
           if (i % 10 === 0 || i === totalFrames - 1) {
-            const elapsed = (performance.now() - startTime) / 1000;
+            const elapsed = (performance.now() - startTimeMs) / 1000;
             const fpsCurrent = (i + 1) / elapsed;
             const remaining = (totalFrames - (i + 1)) / fpsCurrent;
             const eta = remaining > 0 ? `${Math.ceil(remaining)}s` : '0s';
@@ -1121,8 +1219,8 @@ export default function App() {
       isExportingRef.current = false;
       setExportStatus('');
       setExportProgress(0);
-      const activeNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTime && currentTime < n.startTime + n.duration);
-      drawCanvas(currentMouth, currentTime, activeNote ? activeNote.cleanedLyric : '');
+      const activeNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTimeMs && currentTime < n.startTimeMs + n.durationMs);
+      drawCanvas(currentMouth, currentTime, activeNote ? activeNote.lyric : '');
     }
   };
 
@@ -1136,7 +1234,7 @@ export default function App() {
     const data = parsedDataRef.current;
     if (data && data.notes.length > 0) {
       const lastNote = data.notes[data.notes.length - 1];
-      const totalDuration = (lastNote.startTime + lastNote.duration) / 1000;
+      const totalDuration = (lastNote.startTimeMs + lastNote.durationMs) / 1000;
       if (totalDuration > 300) {
         if (!window.confirm(t.longVideoWarning)) {
           return;
@@ -1190,14 +1288,14 @@ export default function App() {
       };
 
       const lastNote = parsedData.notes[parsedData.notes.length - 1];
-      const totalDurationMs = lastNote ? lastNote.startTime + lastNote.duration : 0;
+      const totalDurationMs = lastNote ? lastNote.startTimeMs + lastNote.durationMs : 0;
       const durationToRecord = totalDurationMs + 500;
 
       recorder.start();
       
       setIsPlaying(true);
       isPlayingRef.current = true;
-      startTimeRef.current = performance.now();
+      startTimeMsRef.current = performance.now();
       if (audioRef.current && audioUrl) {
         audioRef.current.play().catch(console.error);
       }
@@ -1307,8 +1405,8 @@ export default function App() {
       isExportingRef.current = false;
       setExportStatus('');
       setExportProgress(0);
-      const activeNote = parsedData.notes.find(n => currentTime >= n.startTime && currentTime < n.startTime + n.duration);
-      drawCanvas(currentMouth, currentTime, activeNote ? activeNote.cleanedLyric : '');
+      const activeNote = parsedData.notes.find(n => currentTime >= n.startTimeMs && currentTime < n.startTimeMs + n.durationMs);
+      drawCanvas(currentMouth, currentTime, activeNote ? activeNote.lyric : '');
     }
   };
 
@@ -1325,11 +1423,247 @@ export default function App() {
     };
   }, []);
 
+  const recalculateTimings = (notes: NoteData[], tempo: number): NoteData[] => {
+    const msPerTick = 60000 / (tempo * TICKS_PER_BEAT);
+    let currentStartTime = 0;
+    
+    return notes.map(note => {
+      const durationMs = note.length * msPerTick;
+      const res = {
+        ...note,
+        startTimeMs: currentStartTime,
+        durationMs: durationMs
+      };
+      currentStartTime += durationMs;
+      return res;
+    });
+  };
+
+  const handleBpmChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newTempo = parseFloat(e.target.value);
+    if (isNaN(newTempo) || newTempo <= 0 || !parsedData) return;
+    
+    const updatedNotes = recalculateTimings(parsedData.notes, newTempo);
+    const newData = { ...parsedData, tempo: newTempo, notes: updatedNotes };
+    
+    setParsedData(newData);
+    parsedDataRef.current = newData;
+    
+    // Force redraw for canvas if needed, mostly handled by reactive states
+  };
+
+  const parseUstx = (content: string) => {
+    try {
+      const parsed = yaml.load(content) as any;
+      if (!parsed) throw new Error("Invalid YAML");
+
+      const bpm = (parsed.tempos && parsed.tempos[0] && parsed.tempos[0].bpm) || parsed.bpm || 120;
+      const resolution = parsed.resolution || 480;
+
+      const parts = parsed.voice_parts || [];
+      if (parts.length === 0) {
+        throw new Error("No voice parts found in ustx");
+      }
+
+      setUstxData({ bpm, resolution, parsed });
+
+      const options = parts.map((part: any, index: number) => {
+        const trackObj = parsed.tracks && parsed.tracks[part.track_no];
+        const trackName = trackObj?.name || part.name || `Track ${part.track_no ?? index}`;
+        const notesCount = part.notes?.length || 0;
+        return {
+          id: index,
+          name: trackName,
+          notesCount,
+          format: 'ustx' as 'ustx' | 'vsqx',
+          part
+        };
+      });
+
+      if (options.length > 1 || (parsed.tracks && parsed.tracks.length > 1)) {
+        setTrackOptions(options);
+        setShowTrackSelector(true);
+      } else {
+        processUstxPart(options[0].part, bpm, resolution);
+      }
+    } catch (err) {
+      console.error("USTX parse error", err);
+      setError(t.parseError);
+    }
+  };
+
+  const processUstxPart = (part: any, bpm: number, resolution: number) => {
+    if (!part || !part.notes) return;
+    const ticksPerBeat = resolution;
+    const msPerTick = 60000 / (bpm * ticksPerBeat);
+
+    const partOffsetMs = (part.position || 0) * msPerTick;
+
+    const notes: NoteData[] = part.notes.map((n: any, i: number) => {
+      const originalLyric = n.lyric || '';
+      const parts = originalLyric.split(' ');
+      const cleanedLyric = parts[parts.length - 1];
+
+      const startTimeMs = partOffsetMs + ((n.position || 0) * msPerTick);
+      const durationMs = (n.length || 0) * msPerTick;
+      
+      return {
+        index: i + 1,
+        originalLyric: originalLyric,
+        lyric: cleanedLyric,
+        length: n.length || 0,
+        startTimeMs,
+        durationMs
+      };
+    });
+
+    const newData = { tempo: bpm, notes };
+    parsedDataRef.current = newData;
+    setParsedData(newData);
+    
+    const unique = new Set<string>();
+    notes.forEach((note: NoteData) => {
+      if (note.lyric && note.lyric !== 'R' && note.lyric !== '息' && note.lyric !== '休' && note.lyric !== '+') {
+        unique.add(note.lyric);
+      }
+    });
+    setUniqueLyrics(Array.from(unique));
+    
+    setShowTrackSelector(false);
+  };
+
+  const parseVsqx = (content: string) => {
+    try {
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(content, "text/xml");
+
+      const getEls = (parent: Element | Document, tagName: string): Element[] => {
+        return Array.from(parent.getElementsByTagName("*")).filter(el => el.localName === tagName || el.tagName === tagName);
+      };
+
+      const masterTrack = getEls(xmlDoc, "masterTrack")[0];
+      let resolution = 480;
+      let bpm = 120;
+
+      if (masterTrack) {
+        const resNode = getEls(masterTrack, "resolution")[0];
+        if (resNode && resNode.textContent) resolution = parseInt(resNode.textContent, 10);
+
+        const tempoNode = getEls(masterTrack, "tempo")[0];
+        if (tempoNode) {
+          const vNode = getEls(tempoNode, "v")[0];
+          if (vNode && vNode.textContent) bpm = parseInt(vNode.textContent, 10) / 100;
+        }
+      }
+
+      setVsqxData({ bpm, resolution });
+
+      const vsTracks = getEls(xmlDoc, "vsTrack");
+      const options: any[] = [];
+
+      vsTracks.forEach((track, index) => {
+        const tNoNode = getEls(track, "tNo")[0];
+        const nameNode = getEls(track, "name")[0];
+        const trackName = nameNode?.textContent || `Track ${tNoNode?.textContent || index}`;
+
+        // VSQ4 uses vsPart, VSQ3 uses musicalPart
+        const vsParts = [...getEls(track, "vsPart"), ...getEls(track, "musicalPart")];
+        let notesCount = 0;
+        const allNotes: any[] = [];
+
+        vsParts.forEach(part => {
+          const partTNode = getEls(part, "t")[0];
+          const partTick = partTNode && partTNode.textContent ? parseInt(partTNode.textContent, 10) : 0;
+
+          const notes = getEls(part, "note");
+          notesCount += notes.length;
+
+          notes.forEach(note => {
+            const noteTNode = getEls(note, "t")[0];
+            const noteDurNode = getEls(note, "dur")[0];
+            const noteYNode = getEls(note, "y")[0];
+
+            const noteTick = noteTNode && noteTNode.textContent ? parseInt(noteTNode.textContent, 10) : 0;
+            const durTick = noteDurNode && noteDurNode.textContent ? parseInt(noteDurNode.textContent, 10) : 0;
+            const lyric = noteYNode?.textContent || '';
+
+            allNotes.push({
+              absoluteTick: partTick + noteTick,
+              durTick,
+              lyric
+            });
+          });
+        });
+
+        if (allNotes.length > 0) {
+          options.push({
+            id: index,
+            name: trackName,
+            notesCount,
+            format: 'vsqx',
+            part: allNotes
+          });
+        }
+      });
+
+      if (options.length > 1) {
+        setTrackOptions(options);
+        setShowTrackSelector(true);
+      } else if (options.length === 1) {
+        processVsqxTrack(options[0].part, bpm, resolution);
+      } else {
+        throw new Error("No notes found in vsqx");
+      }
+
+    } catch (err) {
+      console.error("VSQX parse error", err);
+      setError(t.parseError);
+    }
+  };
+
+  const processVsqxTrack = (notesData: any[], bpm: number, resolution: number) => {
+    const ticksPerBeat = resolution;
+    const msPerTick = 60000 / (bpm * ticksPerBeat);
+
+    const notes: NoteData[] = notesData.map((n: any, i: number) => {
+      // Clean up lyric like UST (taking last part of space-separated strings, e.g. "a あ")
+      const originalLyric = n.lyric || '';
+      const parts = originalLyric.split(' ');
+      const cleanedLyric = parts[parts.length - 1];
+
+      const startTimeMs = n.absoluteTick * msPerTick;
+      const durationMs = n.durTick * msPerTick;
+      
+      return {
+        index: i + 1,
+        originalLyric: originalLyric,
+        lyric: cleanedLyric,
+        length: n.durTick,
+        startTimeMs,
+        durationMs
+      };
+    });
+
+    const newData = { tempo: bpm, notes };
+    parsedDataRef.current = newData;
+    setParsedData(newData);
+    
+    const unique = new Set<string>();
+    notes.forEach((note: NoteData) => {
+      if (note.lyric && note.lyric !== 'R' && note.lyric !== '息' && note.lyric !== '休' && note.lyric !== '+') {
+        unique.add(note.lyric);
+      }
+    });
+    setUniqueLyrics(Array.from(unique));
+    
+    setShowTrackSelector(false);
+  };
+
   const parseUst = (content: string) => {
     const lines = content.split(/\r?\n/);
     let currentTempo = 120;
     let currentSection = '';
-    let currentNote: Partial<NoteData> & { index?: string } = {};
+    let currentNote: any = {};
     const notes: NoteData[] = [];
 
     for (const line of lines) {
@@ -1340,12 +1674,12 @@ export default function App() {
       if (sectionMatch) {
         if (currentSection.match(/^\d+$/) && currentNote.length !== undefined && currentNote.originalLyric !== undefined) {
           notes.push({
-            index: currentNote.index || '',
+            index: notes.length + 1,
             originalLyric: currentNote.originalLyric,
-            cleanedLyric: currentNote.cleanedLyric || '',
+            lyric: currentNote.lyric || '',
             length: currentNote.length,
-            startTime: 0,
-            duration: 0,
+            startTimeMs: 0,
+            durationMs: 0,
           });
         }
         currentSection = sectionMatch[1];
@@ -1371,7 +1705,7 @@ export default function App() {
           } else if (key === 'Lyric') {
             currentNote.originalLyric = value;
             const parts = value.split(' ');
-            currentNote.cleanedLyric = parts[parts.length - 1];
+            currentNote.lyric = parts[parts.length - 1];
           }
         }
       }
@@ -1379,33 +1713,26 @@ export default function App() {
 
     if (currentSection.match(/^\d+$/) && currentNote.length !== undefined && currentNote.originalLyric !== undefined) {
       notes.push({
-        index: currentNote.index || '',
+        index: notes.length + 1,
         originalLyric: currentNote.originalLyric,
-        cleanedLyric: currentNote.cleanedLyric || '',
+        lyric: currentNote.lyric || '',
         length: currentNote.length,
-        startTime: 0,
-        duration: 0,
+        startTimeMs: 0,
+        durationMs: 0,
       });
     }
 
-    const msPerTick = 60000 / (currentTempo * TICKS_PER_BEAT);
-    let currentStartTime = 0;
+    const finalNotes = recalculateTimings(notes, currentTempo);
 
-    for (const note of notes) {
-      note.startTime = currentStartTime;
-      note.duration = note.length * msPerTick;
-      currentStartTime += note.duration;
-    }
-
-    const newData = { tempo: currentTempo, notes };
+    const newData = { tempo: currentTempo, notes: finalNotes };
     parsedDataRef.current = newData;
     setParsedData(newData);
     
     // 提取唯一歌词
     const unique = new Set<string>();
     notes.forEach(note => {
-      if (note.cleanedLyric && note.cleanedLyric !== 'R' && note.cleanedLyric !== '息') {
-        unique.add(note.cleanedLyric);
+      if (note.lyric && note.lyric !== 'R' && note.lyric !== '息') {
+        unique.add(note.lyric);
       }
     });
     setUniqueLyrics(Array.from(unique));
@@ -1421,7 +1748,7 @@ export default function App() {
   const handleLyricChange = (index: number, newValue: string) => {
     if (!parsedData) return;
     const newNotes = [...parsedData.notes];
-    newNotes[index] = { ...newNotes[index], cleanedLyric: newValue };
+    newNotes[index] = { ...newNotes[index], lyric: newValue };
     const newData = { ...parsedData, notes: newNotes };
     parsedDataRef.current = newData;
     setParsedData(newData);
@@ -1429,17 +1756,17 @@ export default function App() {
     // Update unique lyrics
     const unique = new Set<string>();
     newNotes.forEach(note => {
-      if (note.cleanedLyric && note.cleanedLyric !== 'R' && note.cleanedLyric !== '息') {
-        unique.add(note.cleanedLyric);
+      if (note.lyric && note.lyric !== 'R' && note.lyric !== '息') {
+        unique.add(note.lyric);
       }
     });
     setUniqueLyrics(Array.from(unique));
 
     // Update current mouth if paused and on this frame
     if (!isPlaying) {
-      const currentNote = newNotes.find(n => currentTime >= n.startTime && currentTime < n.startTime + n.duration);
-      const newLyric = currentNote ? currentNote.cleanedLyric : '';
-      const newMouth = currentNote ? getMouthShape(currentNote.cleanedLyric) : 'default';
+      const currentNote = newNotes.find(n => currentTime >= n.startTimeMs && currentTime < n.startTimeMs + n.durationMs);
+      const newLyric = currentNote ? currentNote.lyric : '';
+      const newMouth = currentNote ? getMouthShape(currentNote.lyric) : 'default';
       setCurrentMouth(newMouth);
       drawCanvas(newMouth, currentTime, newLyric);
     }
@@ -1449,19 +1776,27 @@ export default function App() {
     if (!file) return;
     setError('');
     
-    if (!file.name.toLowerCase().endsWith('.ust')) {
+    if (!file.name.toLowerCase().endsWith('.ust') && !file.name.toLowerCase().endsWith('.ustx') && !file.name.toLowerCase().endsWith('.vsqx')) {
       setError(t.invalidUst);
       return;
     }
 
     setFileName(file.name);
+    const isUstx = file.name.toLowerCase().endsWith('.ustx');
+    const isVsqx = file.name.toLowerCase().endsWith('.vsqx');
 
     const reader = new FileReader();
     reader.onload = (e) => {
       const result = e.target?.result;
       if (typeof result === 'string') {
         try {
-          parseUst(result);
+          if (isUstx) {
+            parseUstx(result);
+          } else if (isVsqx) {
+            parseVsqx(result);
+          } else {
+            parseUst(result);
+          }
         } catch (err) {
           console.error(err);
           setError(t.parseError);
@@ -1471,7 +1806,7 @@ export default function App() {
       }
     };
     reader.onerror = () => setError(t.fileReadError);
-    reader.readAsText(file, 'Shift_JIS');
+    reader.readAsText(file, (isUstx || isVsqx) ? 'UTF-8' : 'Shift_JIS');
   };
 
   const handleClearMouthImage = (shape: MouthShape, e: React.MouseEvent) => {
@@ -1560,8 +1895,8 @@ export default function App() {
     setBackgroundColor(null);
     backgroundColorRef.current = null;
     
-    const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTime && currentTime < n.startTime + n.duration);
-    drawCanvas(currentMouth, currentTime, currentNote ? currentNote.cleanedLyric : '');
+    const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTimeMs && currentTime < n.startTimeMs + n.durationMs);
+    drawCanvas(currentMouth, currentTime, currentNote ? currentNote.lyric : '');
   };
 
   const handleBackgroundColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1579,8 +1914,8 @@ export default function App() {
     bgGifFramesRef.current = null;
     
     // Redraw
-    const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTime && currentTime < n.startTime + n.duration);
-    drawCanvas(currentMouth, currentTime, currentNote ? currentNote.cleanedLyric : '');
+    const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTimeMs && currentTime < n.startTimeMs + n.durationMs);
+    drawCanvas(currentMouth, currentTime, currentNote ? currentNote.lyric : '');
   };
 
   const handleMouthImageUpload = async (shape: MouthShape, file: File) => {
@@ -1597,8 +1932,8 @@ export default function App() {
           return { ...prev, [shape]: createTrackedURL(file) };
         });
         
-        const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTime && currentTime < n.startTime + n.duration);
-        drawCanvas(currentMouth, currentTime, currentNote ? currentNote.cleanedLyric : '');
+        const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTimeMs && currentTime < n.startTimeMs + n.durationMs);
+        drawCanvas(currentMouth, currentTime, currentNote ? currentNote.lyric : '');
       } catch (err) {
         console.error("Failed to parse mouth GIF:", err);
         alert(t.gifParseFailed || "Failed to parse GIF");
@@ -1633,8 +1968,8 @@ export default function App() {
           return { ...prev, [lyric]: createTrackedURL(file) };
         });
         
-        const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTime && currentTime < n.startTime + n.duration);
-        drawCanvas(currentMouth, currentTime, currentNote ? currentNote.cleanedLyric : '');
+        const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTimeMs && currentTime < n.startTimeMs + n.durationMs);
+        drawCanvas(currentMouth, currentTime, currentNote ? currentNote.lyric : '');
       } catch (err) {
         console.error("Failed to parse override GIF:", err);
         alert(t.gifParseFailed || "Failed to parse GIF");
@@ -1685,8 +2020,8 @@ export default function App() {
           return createTrackedURL(file);
         }); // Just for UI display
         bgImageElementRef.current = null; // Clear static image
-        const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTime && currentTime < n.startTime + n.duration);
-        drawCanvas(currentMouth, currentTime, currentNote ? currentNote.cleanedLyric : '');
+        const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTimeMs && currentTime < n.startTimeMs + n.durationMs);
+        drawCanvas(currentMouth, currentTime, currentNote ? currentNote.lyric : '');
       } catch (err) {
         console.error("Failed to parse GIF:", err);
         alert(t.gifParseFailed);
@@ -1702,26 +2037,102 @@ export default function App() {
           if (prev) revokeTrackedURL(prev);
           return url;
         });
-        const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTime && currentTime < n.startTime + n.duration);
-        drawCanvas(currentMouth, currentTime, currentNote ? currentNote.cleanedLyric : '');
+        const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTimeMs && currentTime < n.startTimeMs + n.durationMs);
+        drawCanvas(currentMouth, currentTime, currentNote ? currentNote.lyric : '');
       };
       img.src = url;
     }
   };
 
   return (
-    <div className="flex flex-col h-screen bg-zinc-50 text-zinc-900 font-sans selection:bg-indigo-500/30 overflow-hidden">
+    <div className="flex flex-col h-[100dvh] bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans selection:bg-indigo-500/30 overflow-hidden">
+      {/* Track Selector Modal for USTX / VSQX */}
+      {showTrackSelector && (ustxData || vsqxData) && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl p-6 w-full max-w-md animate-in zoom-in-95 duration-200 border border-transparent dark:border-zinc-800">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">{t.selectTrack}</h3>
+              <button 
+                onClick={() => setShowTrackSelector(false)}
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                title="Close"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-6 font-medium">
+              {t.selectTrackDesc}
+            </p>
+
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto custom-scrollbar pr-2 mb-6">
+              {trackOptions.map((opt) => (
+                <button
+                  key={opt.id}
+                  onClick={() => {
+                    if (opt.format === 'ustx' && ustxData) {
+                      processUstxPart(opt.part, ustxData.bpm, ustxData.resolution);
+                    } else if (opt.format === 'vsqx' && vsqxData) {
+                      processVsqxTrack(opt.part, vsqxData.bpm, vsqxData.resolution);
+                    }
+                  }}
+                  className="w-full flex items-center justify-between p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500 hover:bg-indigo-50/50 dark:hover:bg-indigo-500/10 hover:shadow-md transition-all group text-left bg-transparent"
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-800 group-hover:bg-indigo-100 dark:group-hover:bg-indigo-500/20 flex items-center justify-center text-zinc-500 dark:text-zinc-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                      <Layers className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-zinc-900 dark:text-zinc-100 group-hover:text-indigo-700 dark:group-hover:text-indigo-400 transition-colors">{opt.name}</h4>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-500 font-mono mt-0.5">Track #{typeof opt.part.track_no === 'number' ? opt.part.track_no : opt.id}</p>
+                    </div>
+                  </div>
+                  <div className="px-3 py-1 bg-zinc-100 dark:bg-zinc-800 group-hover:bg-indigo-100/50 dark:group-hover:bg-indigo-500/20 rounded-full text-xs font-mono text-zinc-600 dark:text-zinc-300 group-hover:text-indigo-700 dark:group-hover:text-indigo-400 transition-colors">
+                    {opt.notesCount} notes
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Absolute Language & Theme Buttons */}
+      <div className="fixed top-4 right-4 z-50 portrait:flex landscape:hidden w-auto items-center space-x-2">
+        <button 
+          onClick={toggleDarkMode} 
+          className="p-2 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm shadow-md border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-full transition-all"
+          title={isDarkMode ? "Light Mode" : "Dark Mode"}
+        >
+          {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+        </button>
+        <button 
+          onClick={() => setShowModal(true)} 
+          className="p-2 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm shadow-md border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-full transition-all"
+          title={`${t.language} / ${t.notice}`}
+        >
+          <Globe className="w-5 h-5" />
+        </button>
+      </div>
+
       {/* Header */}
-      <header className="flex-none h-16 w-full backdrop-blur-md bg-zinc-50/80 border-b border-zinc-200 z-40">
-        <div className="max-w-7xl mx-auto px-4 h-full flex items-center justify-between">
+      <header className="landscape:flex portrait:hidden flex-none h-16 w-full backdrop-blur-md bg-zinc-50/80 dark:bg-zinc-950/80 border-b border-zinc-200 dark:border-zinc-800 z-40">
+        <div className="max-w-7xl w-full mx-auto px-6 h-full flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <Music className="w-6 h-6 text-indigo-600" />
-            <span className="font-semibold text-zinc-900">{t.title}</span>
+            <Music className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+            <span className="font-semibold text-zinc-900 dark:text-zinc-100">{t.title}</span>
           </div>
           <div className="flex items-center space-x-4">
             <button 
+              onClick={toggleDarkMode} 
+              className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 rounded-full transition-all"
+              title={isDarkMode ? "Light Mode" : "Dark Mode"}
+            >
+              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
+            <button 
               onClick={() => setShowModal(true)} 
-              className="p-2 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/50 rounded-full transition-all"
+              className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 rounded-full transition-all"
               title={`${t.language} / ${t.notice}`}
             >
               <Globe className="w-5 h-5" />
@@ -1733,10 +2144,10 @@ export default function App() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white border border-zinc-200 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
             <div className="p-6 space-y-6">
               <div className="space-y-2 text-center">
-                <h3 className="text-xl font-semibold text-zinc-900">{t.language}</h3>
+                <h3 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">{t.language}</h3>
                 <div className="flex justify-center space-x-2">
                   {(['zh', 'en', 'ja'] as Language[]).map(lang => (
                     <button
@@ -1745,7 +2156,7 @@ export default function App() {
                       className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                         language === lang 
                           ? 'bg-indigo-500 text-white' 
-                          : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200 hover:text-zinc-800'
+                          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 hover:text-zinc-800 dark:hover:text-zinc-200'
                       }`}
                     >
                       {lang === 'zh' ? '中文' : lang === 'en' ? 'English' : '日本語'}
@@ -1755,14 +2166,14 @@ export default function App() {
               </div>
               
               <div className="space-y-2">
-                <h3 className="text-xl font-semibold text-zinc-900 text-center">{t.noticeTitle}</h3>
-                <div className="h-40 bg-zinc-50 rounded-lg p-4 overflow-y-auto border border-zinc-200 text-sm text-zinc-600 whitespace-pre-wrap">
+                <h3 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100 text-center">{t.noticeTitle}</h3>
+                <div className="h-40 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg p-4 overflow-y-auto border border-zinc-200 dark:border-zinc-800 text-sm text-zinc-600 dark:text-zinc-400 whitespace-pre-wrap custom-scrollbar">
                   {t.noticeContent}
                 </div>
               </div>
             </div>
             
-            <div className="p-4 bg-zinc-50/50 border-t border-zinc-200">
+            <div className="p-4 bg-zinc-50/50 dark:bg-zinc-800/50 border-t border-zinc-200 dark:border-zinc-800">
               <button
                 onClick={handleCloseModal}
                 className="w-full py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg font-medium transition-colors"
@@ -1775,27 +2186,39 @@ export default function App() {
       )}
 
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
+      <div 
+        ref={mainContainerRef}
+        className={`flex-1 flex portrait:flex-col landscape:flex-row overflow-hidden ${isDraggingDivider ? 'select-none' : ''}`}
+      >
         {/* Left Console */}
-        <div className="w-[60%] h-full overflow-y-auto p-8 space-y-12 custom-scrollbar">
-          
-          {/* Header */}
-          <header className="space-y-4 text-center">
-            <h1 className="text-4xl font-semibold tracking-tight text-zinc-950">
+        <div 
+          className="portrait:w-full landscape:h-full overflow-y-auto custom-scrollbar landscape:[direction:rtl] z-10"
+          style={{ 
+            [isPortraitTheme ? 'height' : 'width']: `${panelRatio}%`,
+            flexShrink: 0, 
+            flexGrow: 0 
+          }}
+        >
+          {/* Inner wrapper for RTL to LTR trick */}
+          <div className="w-full h-max landscape:[direction:ltr] portrait:p-4 landscape:p-8 portrait:space-y-6 landscape:space-y-12">
+            
+            {/* Header */}
+          <header className="space-y-3 text-center portrait:hidden landscape:block">
+            <h1 className="text-3xl xl:text-4xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
               {t.title}
             </h1>
-            <p className="text-zinc-600 text-lg">
+            <p className="text-base xl:text-lg text-zinc-600 dark:text-zinc-400">
               {t.subtitle}
             </p>
           </header>
 
         {/* Step 1: Actors */}
-        <section className="space-y-6">
-          <div className="flex items-center space-x-3 border-b border-zinc-200 pb-4">
-            <div className="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-600 flex items-center justify-center font-bold">1</div>
-            <h2 className="text-2xl font-semibold">{t.step1}</h2>
+        <section className="portrait:space-y-4 landscape:space-y-6">
+          <div className="flex items-center portrait:space-x-2 landscape:space-x-3 border-b border-zinc-200 dark:border-zinc-800 portrait:pb-2 landscape:pb-4">
+            <div className="portrait:w-6 portrait:h-6 landscape:w-8 landscape:h-8 portrait:text-sm landscape:text-base rounded-full bg-indigo-500/20 text-indigo-600 dark:bg-indigo-500/30 dark:text-indigo-400 flex items-center justify-center font-bold">1</div>
+            <h2 className="portrait:text-lg landscape:text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{t.step1}</h2>
           </div>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-4">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(60px,1fr))] landscape:grid-cols-[repeat(auto-fill,minmax(100px,1fr))] 2xl:landscape:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] portrait:gap-2 landscape:gap-4">
             {mouthShapeConfigs.map((config) => (
               <DragDropWrapper
                 key={config.id}
@@ -1846,18 +2269,18 @@ export default function App() {
 
         {/* Custom Overrides */}
         {uniqueLyrics.length > 0 && (
-          <section className="space-y-6">
-            <div className="flex items-center justify-between border-b border-zinc-200 pb-4">
-              <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 rounded-full bg-purple-500/20 text-purple-600 flex items-center justify-center font-bold">
-                  <Settings className="w-4 h-4" />
+          <section className="portrait:space-y-4 landscape:space-y-6">
+            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 portrait:pb-2 landscape:pb-4">
+              <div className="flex items-center portrait:space-x-2 landscape:space-x-3">
+                <div className="portrait:w-6 portrait:h-6 landscape:w-8 landscape:h-8 rounded-full bg-purple-500/20 text-purple-600 dark:bg-purple-500/30 dark:text-purple-400 flex items-center justify-center font-bold">
+                  <Settings className="portrait:w-3 portrait:h-3 landscape:w-4 landscape:h-4" />
                 </div>
-                <h2 className="text-2xl font-semibold">{t.specialLyrics}</h2>
+                <h2 className="portrait:text-lg landscape:text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{t.specialLyrics}</h2>
               </div>
-              <span className="text-sm text-zinc-600">{t.detectedSounds.replace('{count}', uniqueLyrics.length.toString())}</span>
+              <span className="portrait:text-xs landscape:text-sm text-zinc-600 dark:text-zinc-400">{t.detectedSounds.replace('{count}', uniqueLyrics.length.toString())}</span>
             </div>
             
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(80px,1fr))] gap-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(50px,1fr))] landscape:grid-cols-[repeat(auto-fill,minmax(80px,1fr))] portrait:gap-2 landscape:gap-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
               {uniqueLyrics.map((lyric) => {
                 const baseShape = getMouthShape(lyric);
                 const hasOverride = !!overrideImages[lyric];
@@ -1870,7 +2293,7 @@ export default function App() {
                     accept="image/*"
                     className={(isDragging) => `
                       relative flex flex-col items-center justify-center aspect-square rounded-xl border cursor-pointer overflow-hidden transition-all
-                      ${hasOverride ? 'bg-purple-500/10 border-purple-500/50 hover:border-purple-400' : 'bg-zinc-100/50 border-zinc-300/50 hover:border-zinc-500'}
+                      ${hasOverride ? 'bg-purple-500/10 border-purple-500/50 hover:border-purple-400' : 'bg-zinc-100/50 dark:bg-zinc-800/50 border-zinc-300/50 dark:border-zinc-700/50 hover:border-zinc-500 dark:hover:border-zinc-400'}
                       ${isDragging ? 'border-emerald-500 bg-emerald-500/10 scale-[1.02]' : ''}
                     `}
                   >
@@ -1888,7 +2311,7 @@ export default function App() {
                         {displayImg ? (
                           <img src={displayImg} alt={lyric} className={`absolute inset-0 w-full h-full object-contain pointer-events-none ${!hasOverride ? 'opacity-50 grayscale' : ''}`} />
                         ) : (
-                          <span className="text-2xl font-bold text-zinc-700 pointer-events-none">{lyric}</span>
+                          <span className="text-2xl font-bold text-zinc-700 dark:text-zinc-300 pointer-events-none">{lyric}</span>
                         )}
                         
                         {hasOverride && (
@@ -1906,7 +2329,7 @@ export default function App() {
                         </div>
                         
                         {!hasOverride && (
-                          <div className="absolute top-1 right-1 px-1.5 py-0.5 bg-zinc-100/80 backdrop-blur text-[8px] font-mono text-zinc-600 rounded pointer-events-none">
+                          <div className="absolute top-1 right-1 px-1.5 py-0.5 bg-zinc-100/80 dark:bg-zinc-800/80 backdrop-blur text-[8px] font-mono text-zinc-600 dark:text-zinc-400 rounded pointer-events-none">
                             {baseShape}
                           </div>
                         )}
@@ -1924,38 +2347,38 @@ export default function App() {
         )}
 
         {/* Step 2: Script & Assets */}
-        <section className="space-y-6">
-          <div className="flex items-center space-x-3 border-b border-zinc-200 pb-4">
-            <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-600 flex items-center justify-center font-bold">2</div>
-            <h2 className="text-2xl font-semibold">{t.step2}</h2>
+        <section className="portrait:space-y-4 landscape:space-y-6">
+          <div className="flex items-center portrait:space-x-2 landscape:space-x-3 border-b border-zinc-200 dark:border-zinc-800 portrait:pb-2 landscape:pb-4">
+            <div className="portrait:w-6 portrait:h-6 landscape:w-8 landscape:h-8 rounded-full bg-emerald-500/20 text-emerald-600 dark:bg-emerald-500/30 dark:text-emerald-400 flex items-center justify-center font-bold">2</div>
+            <h2 className="portrait:text-lg landscape:text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{t.step2}</h2>
           </div>
           
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 landscape:grid-cols-3 portrait:gap-4 landscape:gap-6">
             {/* UST Upload */}
             <DragDropWrapper
               onDropFile={handleFile}
-              accept=".ust"
+              accept=".ust,.ustx,.vsqx"
               onClick={() => fileInputRef.current?.click()}
               className={(isDragging) => `
                 relative group cursor-pointer flex flex-col items-center justify-center 
-                w-full h-48 rounded-3xl border-2 border-dashed transition-all duration-300 ease-out
+                w-full portrait:h-24 landscape:h-48 portrait:rounded-2xl landscape:rounded-3xl border-2 border-dashed transition-all duration-300 ease-out
                 ${isDragging 
                   ? 'border-emerald-500 bg-emerald-500/10 scale-[1.02]' 
-                  : 'border-zinc-200 bg-white/50 hover:border-zinc-300 hover:bg-white'}
+                  : 'border-zinc-200 dark:border-zinc-700 bg-white/50 dark:bg-zinc-800/50 hover:border-zinc-300 dark:hover:border-zinc-600 hover:bg-white dark:hover:bg-zinc-800'}
               `}
             >
               {(isDragging) => (
                 <>
-                  <input type="file" ref={fileInputRef} onChange={(e) => e.target.files && handleFile(e.target.files[0])} accept=".ust" className="hidden" />
-                  <div className="flex flex-col items-center space-y-4 pointer-events-none">
-                    <div className={`p-4 rounded-full transition-colors duration-300 ${isDragging ? 'bg-emerald-500/20 text-emerald-600' : 'bg-zinc-100 text-zinc-600 group-hover:bg-zinc-200 group-hover:text-zinc-700'}`}>
-                      <FileText className="w-8 h-8" />
+                  <input type="file" ref={fileInputRef} onChange={(e) => e.target.files && handleFile(e.target.files[0])} accept=".ust,.ustx,.vsqx" className="hidden" />
+                  <div className="flex portrait:flex-row landscape:flex-col items-center portrait:space-x-4 landscape:space-y-4 pointer-events-none">
+                    <div className={`p-2 landscape:p-4 rounded-full transition-colors duration-300 ${isDragging ? 'bg-emerald-500/20 text-emerald-600 dark:bg-emerald-500/30 dark:text-emerald-400' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 group-hover:text-zinc-700 dark:group-hover:text-zinc-300'}`}>
+                      <FileText className="w-6 h-6 landscape:w-8 landscape:h-8" />
                     </div>
-                    <div className="text-center space-y-1">
-                      <p className="text-lg font-medium text-zinc-800">
+                    <div className="portrait:text-left landscape:text-center portrait:space-y-0 landscape:space-y-1">
+                      <p className="portrait:text-sm landscape:text-lg font-medium text-zinc-800 dark:text-zinc-200 landscape:px-4 line-clamp-1 truncate w-full">
                         {fileName ? `${t.selected}${fileName}` : t.uploadUst}
                       </p>
-                      <p className="text-sm text-zinc-500">{t.uploadUstDesc}</p>
+                      <p className="portrait:text-xs landscape:text-sm text-zinc-500 dark:text-zinc-400">{t.uploadUstDesc}</p>
                     </div>
                   </div>
                   {fileName && (
@@ -1984,10 +2407,10 @@ export default function App() {
               accept="audio/*"
               className={(isDragging) => `
                 relative group cursor-pointer flex flex-col items-center justify-center 
-                w-full h-48 rounded-3xl border-2 border-dashed transition-all duration-300 ease-out
+                w-full portrait:h-24 landscape:h-48 portrait:rounded-2xl landscape:rounded-3xl border-2 border-dashed transition-all duration-300 ease-out
                 ${isDragging 
                   ? 'border-emerald-500 bg-emerald-500/10 scale-[1.02]' 
-                  : 'border-zinc-200 bg-white/50 hover:border-zinc-300 hover:bg-white'}
+                  : 'border-zinc-200 dark:border-zinc-700 bg-white/50 dark:bg-zinc-800/50 hover:border-zinc-300 dark:hover:border-zinc-600 hover:bg-white dark:hover:bg-zinc-800'}
               `}
             >
               {(isDragging) => (
@@ -1995,15 +2418,15 @@ export default function App() {
                   <label className="absolute inset-0 w-full h-full cursor-pointer">
                     <input type="file" accept="audio/*" onChange={handleAudioUpload} className="hidden" />
                   </label>
-                  <div className="flex flex-col items-center space-y-4 pointer-events-none">
-                    <div className={`p-4 rounded-full transition-colors duration-300 ${isDragging ? 'bg-emerald-500/20 text-emerald-600' : 'bg-zinc-100 text-zinc-600 group-hover:bg-zinc-200 group-hover:text-zinc-700'}`}>
-                      <Music className="w-8 h-8" />
+                  <div className="flex portrait:flex-row landscape:flex-col items-center portrait:space-x-4 landscape:space-y-4 pointer-events-none">
+                    <div className={`p-2 landscape:p-4 rounded-full transition-colors duration-300 ${isDragging ? 'bg-emerald-500/20 text-emerald-600 dark:bg-emerald-500/30 dark:text-emerald-400' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 group-hover:text-zinc-700 dark:group-hover:text-zinc-300'}`}>
+                      <Music className="w-6 h-6 landscape:w-8 landscape:h-8" />
                     </div>
-                    <div className="text-center space-y-1">
-                      <p className="text-lg font-medium text-zinc-800">
+                    <div className="portrait:text-left landscape:text-center portrait:space-y-0 landscape:space-y-1">
+                      <p className="portrait:text-sm landscape:text-lg font-medium text-zinc-800 dark:text-zinc-200">
                         {audioUrl ? t.audioUploaded : t.uploadAudio}
                       </p>
-                      <p className="text-sm text-zinc-500">{t.uploadAudioDesc}</p>
+                      <p className="portrait:text-xs landscape:text-sm text-zinc-500 dark:text-zinc-400">{t.uploadAudioDesc}</p>
                     </div>
                   </div>
                   {audioUrl && <audio ref={audioRef} src={audioUrl} className="hidden" />}
@@ -2035,8 +2458,8 @@ export default function App() {
                       return createTrackedURL(file);
                     });
                     bgImageElementRef.current = null;
-                    const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTime && currentTime < n.startTime + n.duration);
-                    drawCanvas(currentMouth, currentTime, currentNote ? currentNote.cleanedLyric : '');
+                    const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTimeMs && currentTime < n.startTimeMs + n.durationMs);
+                    drawCanvas(currentMouth, currentTime, currentNote ? currentNote.lyric : '');
                   } catch (err) {
                     console.error('Failed to parse background GIF:', err);
                     setError(t.errorGif);
@@ -2052,8 +2475,8 @@ export default function App() {
                       if (prev) revokeTrackedURL(prev);
                       return url;
                     });
-                    const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTime && currentTime < n.startTime + n.duration);
-                    drawCanvas(currentMouth, currentTime, currentNote ? currentNote.cleanedLyric : '');
+                    const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTimeMs && currentTime < n.startTimeMs + n.durationMs);
+                    drawCanvas(currentMouth, currentTime, currentNote ? currentNote.lyric : '');
                   };
                   img.src = url;
                 }
@@ -2061,10 +2484,10 @@ export default function App() {
               accept="image/*"
               className={(isDragging) => `
                 relative group cursor-pointer flex flex-col items-center justify-center 
-                w-full h-48 rounded-3xl border-2 border-dashed transition-all duration-300 ease-out overflow-hidden
+                w-full portrait:h-24 landscape:h-48 portrait:rounded-2xl landscape:rounded-3xl border-2 border-dashed transition-all duration-300 ease-out overflow-hidden
                 ${isDragging 
                   ? 'border-emerald-500 bg-emerald-500/10 scale-[1.02]' 
-                  : 'border-zinc-200 bg-white/50 hover:border-zinc-300 hover:bg-white'}
+                  : 'border-zinc-200 dark:border-zinc-700 bg-white/50 dark:bg-zinc-800/50 hover:border-zinc-300 dark:hover:border-zinc-600 hover:bg-white dark:hover:bg-zinc-800'}
               `}
             >
               {(isDragging) => (
@@ -2077,15 +2500,15 @@ export default function App() {
                   ) : backgroundColor ? (
                     <div className="absolute inset-0 w-full h-full opacity-50 pointer-events-none" style={{ backgroundColor }} />
                   ) : null}
-                  <div className="flex flex-col items-center space-y-4 z-10 pointer-events-none">
-                    <div className={`p-4 rounded-full transition-colors duration-300 ${isDragging ? 'bg-emerald-500/20 text-emerald-600' : 'bg-zinc-100 text-zinc-600 group-hover:bg-zinc-200 group-hover:text-zinc-700'}`}>
-                      <Layers className="w-8 h-8" />
+                  <div className="flex portrait:flex-row landscape:flex-col items-center portrait:space-x-4 landscape:space-y-4 z-10 pointer-events-none landscape:w-full landscape:px-4">
+                    <div className={`p-2 landscape:p-4 rounded-full transition-colors duration-300 ${isDragging ? 'bg-emerald-500/20 text-emerald-600 dark:bg-emerald-500/30 dark:text-emerald-400' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 group-hover:text-zinc-700 dark:group-hover:text-zinc-300'}`}>
+                      <Layers className="w-6 h-6 landscape:w-8 landscape:h-8" />
                     </div>
-                    <div className="text-center space-y-1">
-                      <p className="text-lg font-medium text-zinc-800">
+                    <div className="portrait:text-left landscape:text-center portrait:space-y-0 landscape:space-y-1">
+                      <p className="portrait:text-sm landscape:text-lg font-medium text-zinc-800 dark:text-zinc-200 landscape:px-4 line-clamp-1 truncate w-full">
                         {bgImageUrl ? t.bgUploaded : backgroundColor ? t.solidBg : t.uploadBg}
                       </p>
-                      <p className="text-sm text-zinc-500">{t.uploadBgDesc}</p>
+                      <p className="portrait:text-xs landscape:text-sm text-zinc-500 dark:text-zinc-400">{t.uploadBgDesc}</p>
                     </div>
                   </div>
                   {(bgImageUrl || backgroundColor) && (
@@ -2103,7 +2526,7 @@ export default function App() {
                     className="absolute bottom-4 right-4 z-20"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <label className="flex items-center justify-center w-10 h-10 bg-white/80 hover:bg-white text-zinc-700 rounded-full shadow-sm backdrop-blur-sm cursor-pointer transition-colors border border-zinc-200" title="Solid Color Background">
+                    <label className="flex items-center justify-center w-10 h-10 bg-white/80 dark:bg-zinc-800/80 hover:bg-white dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-full shadow-sm backdrop-blur-sm cursor-pointer transition-colors border border-zinc-200 dark:border-zinc-700" title="Solid Color Background">
                       <span className="text-lg">🎨</span>
                       <input 
                         type="color" 
@@ -2129,48 +2552,58 @@ export default function App() {
         {/* Data Table */}
         {parsedData && (
           <section className="space-y-4">
-            <details className="group rounded-xl border border-zinc-200 bg-white/50 overflow-hidden shadow-xl">
-              <summary className="list-none [&::-webkit-details-marker]:hidden px-6 py-4 font-medium text-zinc-700 cursor-pointer hover:bg-zinc-100/50 transition-colors flex items-center justify-between">
+            <details className="group rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-800/50 overflow-hidden shadow-xl">
+              <summary className="list-none [&::-webkit-details-marker]:hidden px-6 py-4 font-medium text-zinc-700 dark:text-zinc-300 cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-700/50 transition-colors flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  <FileText className="w-5 h-5 text-zinc-600" />
+                  <FileText className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
                   <span>{t.parsedData.replace('{count}', parsedData.notes.length.toString())}</span>
+                  <div className="ml-4 flex items-center space-x-2 bg-white/60 dark:bg-zinc-900/60 px-3 py-1 rounded-md border border-zinc-200 dark:border-zinc-700" onClick={(e) => e.stopPropagation()}>
+                    <span className="text-sm text-zinc-500 dark:text-zinc-400 font-medium">BPM:</span>
+                    <input 
+                      type="number"
+                      step="0.01"
+                      className="w-20 bg-transparent border-none text-sm font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:focus:ring-indigo-400 p-1 rounded text-zinc-900 dark:text-zinc-100"
+                      value={parsedData.tempo}
+                      onChange={handleBpmChange}
+                    />
+                  </div>
                 </div>
-                <span className="text-zinc-500 group-open:rotate-180 transition-transform">▼</span>
+                <span className="text-zinc-500 dark:text-zinc-400 group-open:rotate-180 transition-transform">▼</span>
               </summary>
-              <div className="overflow-x-auto custom-scrollbar max-h-[400px] border-t border-zinc-200">
+              <div className="overflow-x-auto custom-scrollbar max-h-[400px] border-t border-zinc-200 dark:border-zinc-800">
                 <table className="w-full text-left text-sm whitespace-nowrap">
-                  <thead className="bg-white/80 sticky top-0 z-10 backdrop-blur-sm border-b border-zinc-200">
+                  <thead className="bg-white/80 dark:bg-zinc-900/80 sticky top-0 z-10 backdrop-blur-sm border-b border-zinc-200 dark:border-zinc-800">
                     <tr>
-                      <th className="px-6 py-4 font-medium text-zinc-600 w-24">{t.index}</th>
-                      <th className="px-6 py-4 font-medium text-zinc-600">{t.originalLyric}</th>
-                      <th className="px-6 py-4 font-medium text-zinc-600">{t.cleanedLyric}</th>
-                      <th className="px-6 py-4 font-medium text-zinc-600">{t.mappedMouth}</th>
-                      <th className="px-6 py-4 font-medium text-zinc-600 text-right">Start (ms)</th>
-                      <th className="px-6 py-4 font-medium text-zinc-600 text-right">Duration (ms)</th>
+                      <th className="px-6 py-4 font-medium text-zinc-600 dark:text-zinc-400 w-24">{t.index}</th>
+                      <th className="px-6 py-4 font-medium text-zinc-600 dark:text-zinc-400">{t.originalLyric}</th>
+                      <th className="px-6 py-4 font-medium text-zinc-600 dark:text-zinc-400">{t.lyric}</th>
+                      <th className="px-6 py-4 font-medium text-zinc-600 dark:text-zinc-400">{t.mappedMouth}</th>
+                      <th className="px-6 py-4 font-medium text-zinc-600 dark:text-zinc-400 text-right">{t.startTimeMsFormatted}</th>
+                      <th className="px-6 py-4 font-medium text-zinc-600 dark:text-zinc-400 text-right">{t.startTimeMsRaw}</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-zinc-800/50">
+                  <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
                     {parsedData.notes.map((note, idx) => {
-                      const isCurrent = currentTime >= note.startTime && currentTime < note.startTime + note.duration;
+                      const isCurrent = currentTime >= note.startTimeMs && currentTime < note.startTimeMs + note.durationMs;
                       return (
-                        <tr key={idx} className={`transition-colors ${isCurrent ? 'bg-indigo-500/20' : 'hover:bg-zinc-100/30'}`}>
-                          <td className="px-6 py-3 font-mono text-zinc-500">[{note.index}]</td>
-                          <td className="px-6 py-3 text-zinc-700">{note.originalLyric}</td>
+                        <tr key={idx} className={`transition-colors ${isCurrent ? 'bg-indigo-500/20 dark:bg-indigo-500/30' : 'hover:bg-zinc-100/30 dark:hover:bg-zinc-800/50'}`}>
+                          <td className="px-6 py-3 font-mono text-zinc-500 dark:text-zinc-400">{note.index}</td>
+                          <td className="px-6 py-3 text-zinc-700 dark:text-zinc-300">{note.originalLyric}</td>
                           <td className="px-6 py-3">
                             <input
                               type="text"
-                              value={note.cleanedLyric}
+                              value={note.lyric}
                               onChange={(e) => handleLyricChange(idx, e.target.value)}
-                              className="w-20 bg-zinc-50/50 border border-zinc-300/50 rounded px-2 py-1 text-indigo-600 font-medium focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                              className="w-20 bg-zinc-50/50 dark:bg-zinc-900/50 border border-zinc-300/50 dark:border-zinc-700/50 rounded px-2 py-1 text-indigo-600 dark:text-indigo-400 font-medium focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500 dark:focus:ring-indigo-400 transition-all"
                             />
                           </td>
                           <td className="px-6 py-3">
-                            <span className="px-2 py-1 rounded bg-zinc-100 text-zinc-700 font-mono text-xs">
-                              {getMouthShape(note.cleanedLyric)}
+                            <span className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-mono text-xs">
+                              {getMouthShape(note.lyric)}
                             </span>
                           </td>
-                          <td className="px-6 py-3 font-mono text-zinc-600 text-right">{note.startTime.toFixed(2)}</td>
-                          <td className="px-6 py-3 font-mono text-zinc-600 text-right">{note.duration.toFixed(2)}</td>
+                          <td className="px-6 py-3 font-mono text-zinc-600 dark:text-zinc-400 text-right">{formatTime(note.startTimeMs)}</td>
+                          <td className="px-6 py-3 font-mono text-zinc-600 dark:text-zinc-400 text-right">{Math.round(note.startTimeMs)}</td>
                         </tr>
                       );
                     })}
@@ -2180,22 +2613,41 @@ export default function App() {
             </details>
           </section>
         )}
-      </div>
+          </div>
+        </div>
 
-      {/* Right Monitor */}
-      <div className="w-[40%] h-full bg-white/30 border-l border-zinc-200 overflow-y-auto custom-scrollbar relative">
-        <div className="sticky top-0 p-8 space-y-8">
+        {/* Resizable Divider */}
+        <div
+          className="group flex flex-none items-center justify-center relative touch-none z-10
+                     portrait:w-full portrait:h-4 portrait:cursor-row-resize portrait:-mt-2 portrait:mb-2
+                     landscape:w-4 landscape:h-full landscape:cursor-col-resize landscape:-ml-2 landscape:mr-2"
+          onMouseDown={() => setIsDraggingDivider(true)}
+          onTouchStart={() => setIsDraggingDivider(true)}
+        >
+          <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-200 ${isDraggingDivider ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+            {/* Hotspot / Visual line */}
+            <div className="absolute portrait:w-full portrait:h-1 portrait:top-1.5 landscape:top-0 landscape:w-1 landscape:h-full landscape:left-1.5 bg-indigo-400 dark:bg-indigo-500/80 group-active:bg-indigo-500 dark:group-active:bg-indigo-600 transition-colors" />
+            {/* Handle icon */}
+            <div className="absolute bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-full flex items-center justify-center shadow-md text-indigo-500 dark:text-indigo-400 portrait:w-8 portrait:h-3 landscape:w-3 landscape:h-8">
+              <span className="portrait:rotate-90 text-[10px] leading-none mb-0.5">⋮</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Monitor */}
+        <div className="flex-1 min-w-0 min-h-0 bg-white/30 dark:bg-zinc-950/30 portrait:border-t landscape:border-l border-zinc-200 dark:border-zinc-800 overflow-y-auto custom-scrollbar relative">
+          <div className="sticky top-0 portrait:p-4 landscape:p-8 portrait:space-y-4 landscape:space-y-8 min-h-max">
           {/* Step 3: Monitor */}
           {parsedData ? (
-            <section className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
-              <div className="flex items-center space-x-3 border-b border-zinc-200 pb-4">
-              <div className="w-8 h-8 rounded-full bg-amber-500/20 text-amber-600 flex items-center justify-center font-bold">3</div>
-              <h2 className="text-2xl font-semibold">{t.step3}</h2>
-            </div>
+            <section className="portrait:space-y-4 landscape:space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
+              <div className="flex items-center portrait:space-x-2 landscape:space-x-3 border-b border-zinc-200 dark:border-zinc-800 portrait:pb-2 landscape:pb-4">
+                <div className="portrait:w-6 portrait:h-6 landscape:w-8 landscape:h-8 rounded-full bg-amber-500/20 text-amber-600 dark:bg-amber-500/30 dark:text-amber-400 flex items-center justify-center font-bold portrait:text-sm landscape:text-base">3</div>
+                <h2 className="portrait:text-lg landscape:text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{t.step3}</h2>
+              </div>
             
-            <div className="flex flex-col items-center space-y-8">
-              {/* Canvas Container */}
-              <div className="relative w-full max-w-2xl aspect-video rounded-3xl border-4 border-zinc-200 bg-white shadow-2xl overflow-hidden flex items-center justify-center bg-checkered">
+              <div className="flex flex-col items-center portrait:space-y-4 landscape:space-y-8">
+                {/* Canvas Container */}
+                <div className="relative w-full max-w-2xl aspect-video portrait:rounded-xl landscape:rounded-3xl portrait:border-2 landscape:border-4 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 portrait:shadow-xl landscape:shadow-2xl overflow-hidden flex items-center justify-center bg-checkered">
                 <div 
                   ref={fullscreenContainerRef} 
                   className={`w-full h-full flex items-center justify-center focus:outline-none ${isFullscreen ? 'bg-black cursor-pointer' : ''}`}
@@ -2229,84 +2681,84 @@ export default function App() {
               <div className="flex flex-col items-center space-y-6 w-full max-w-2xl">
                 
                 {/* Settings Row */}
-                <div className="flex flex-wrap items-center justify-between w-full gap-4 bg-white/50 p-4 rounded-2xl border border-zinc-200">
+                <div className="flex flex-wrap items-center justify-between w-full gap-4 bg-white/50 dark:bg-zinc-900/50 p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800">
                   <div className="flex items-center space-x-4">
                     <div className="flex flex-col space-y-1">
-                      <label className="text-xs text-zinc-500 font-medium">{t.width}</label>
+                      <label className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">{t.width}</label>
                       <input 
                         type="number" 
                         placeholder="Auto"
                         value={customWidth}
                         onChange={(e) => setCustomWidth(e.target.value)}
-                        className="w-20 bg-zinc-100 border border-zinc-300 rounded-lg px-2 py-1 text-sm text-zinc-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        className="w-20 bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg px-2 py-1 text-sm text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:focus:ring-indigo-400"
                       />
                     </div>
                     <div className="flex flex-col space-y-1">
-                      <label className="text-xs text-zinc-500 font-medium">{t.height}</label>
+                      <label className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">{t.height}</label>
                       <input 
                         type="number" 
                         placeholder="Auto"
                         value={customHeight}
                         onChange={(e) => setCustomHeight(e.target.value)}
-                        className="w-20 bg-zinc-100 border border-zinc-300 rounded-lg px-2 py-1 text-sm text-zinc-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        className="w-20 bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg px-2 py-1 text-sm text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:focus:ring-indigo-400"
                       />
                     </div>
                   </div>
                   
                   <div className="flex flex-col space-y-1">
-                    <label className="text-xs text-zinc-500 font-medium">{t.audioOffset}</label>
+                    <label className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">{t.audioOffset}</label>
                     <input 
                       type="number" 
                       step="0.01"
                       value={audioOffset}
                       onChange={(e) => setAudioOffset(Number(e.target.value))}
-                      className="w-24 bg-zinc-100 border border-zinc-300 rounded-lg px-2 py-1 text-sm text-zinc-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      className="w-24 bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg px-2 py-1 text-sm text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:focus:ring-indigo-400"
                     />
                   </div>
                 </div>
 
                 {/* Scrubber */}
                 <div className="w-full space-y-2">
-                  <div className="flex justify-between text-sm font-mono text-zinc-600">
+                  <div className="flex justify-between text-sm font-mono text-zinc-600 dark:text-zinc-400">
                     <span>{formatTime(currentTime)}</span>
-                    <span>{parsedData.notes.length > 0 ? formatTime(parsedData.notes[parsedData.notes.length - 1].startTime + parsedData.notes[parsedData.notes.length - 1].duration) : '00:00.000'}</span>
+                    <span>{parsedData.notes.length > 0 ? formatTime(parsedData.notes[parsedData.notes.length - 1].startTimeMs + parsedData.notes[parsedData.notes.length - 1].durationMs) : '00:00.000'}</span>
                   </div>
                   <input 
                     type="range" 
                     min="0" 
-                    max={parsedData.notes.length > 0 ? parsedData.notes[parsedData.notes.length - 1].startTime + parsedData.notes[parsedData.notes.length - 1].duration : 0} 
+                    max={parsedData.notes.length > 0 ? parsedData.notes[parsedData.notes.length - 1].startTimeMs + parsedData.notes[parsedData.notes.length - 1].durationMs : 0} 
                     step="1"
                     value={currentTime}
                     onChange={handleSeek}
-                    className="w-full h-2 bg-zinc-100 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                    className="w-full h-2 bg-zinc-100 dark:bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500 dark:accent-indigo-400"
                   />
                 </div>
 
-                <div className="flex items-center justify-between w-full">
+                <div className="flex portrait:flex-col landscape:flex-row items-center justify-between w-full portrait:gap-4 landscape:gap-0">
                   <button 
                     onClick={togglePlay}
-                    className="flex items-center justify-center w-14 h-14 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-900 shadow-lg transition-all active:scale-95"
+                    className="flex items-center justify-center portrait:w-full landscape:w-14 portrait:h-12 landscape:h-14 portrait:rounded-xl landscape:rounded-full bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-900 dark:text-zinc-100 portrait:shadow-sm landscape:shadow-lg transition-all active:scale-95"
                   >
                     {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-1" />}
                   </button>
                   
-                  <div className="flex items-center space-x-2">
+                  <div className="flex portrait:flex-wrap landscape:flex-nowrap items-center justify-center portrait:gap-2 landscape:space-x-2 w-full portrait:w-auto">
                     <button
                       onClick={handleFullscreenPreview}
                       disabled={isExporting}
-                      className={`flex items-center justify-center w-14 h-14 rounded-xl font-medium shadow-lg transition-all active:scale-95 border
+                      className={`flex items-center justify-center portrait:w-12 landscape:w-14 portrait:h-12 landscape:h-14 rounded-xl font-medium portrait:shadow-sm landscape:shadow-lg transition-all active:scale-95 border
                         ${isExporting
-                          ? 'bg-zinc-100/50 text-zinc-400 border-zinc-200 cursor-not-allowed'
-                          : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-800 border-zinc-300'}`}
+                          ? 'bg-zinc-100/50 dark:bg-zinc-800/50 text-zinc-400 dark:text-zinc-500 border-zinc-200 dark:border-zinc-800 cursor-not-allowed'
+                          : 'bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 border-zinc-300 dark:border-zinc-700'}`}
                       title={t.fullscreenMode}
                     >
-                      <span className="text-2xl leading-none -mt-1">⛶</span>
+                      <span className="portrait:text-xl landscape:text-2xl leading-none -mt-1">⛶</span>
                     </button>
 
                     <select 
                       value={exportFormat} 
                       onChange={(e) => setExportFormat(e.target.value as any)}
-                      className="h-14 px-4 rounded-xl bg-zinc-100 border border-zinc-300 text-zinc-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="portrait:flex-1 landscape:flex-none portrait:h-12 landscape:h-14 portrait:px-2 landscape:px-4 rounded-xl bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 portrait:text-xs landscape:text-base focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400"
                       disabled={isExporting}
                     >
                       <option value="webm">{t.webmDesc}</option>
@@ -2319,13 +2771,13 @@ export default function App() {
                     <button 
                       onClick={handleExport}
                       disabled={isExporting}
-                      className={`flex items-center justify-center px-6 h-14 rounded-xl font-medium shadow-lg transition-all active:scale-95 space-x-2
+                      className={`flex portrait:flex-1 landscape:flex-none items-center justify-center portrait:px-4 landscape:px-6 portrait:h-12 landscape:h-14 rounded-xl font-medium portrait:shadow-sm landscape:shadow-lg transition-all active:scale-95 portrait:space-x-1 landscape:space-x-2 portrait:text-sm landscape:text-base
                         ${isExporting
                           ? 'bg-indigo-600/50 text-white/50 cursor-not-allowed' 
                           : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/20'}`}
                     >
-                      {isExporting ? <Download className="w-5 h-5 animate-bounce" /> : <Video className="w-5 h-5" />}
-                      <span>
+                      {isExporting ? <Download className="portrait:w-4 portrait:h-4 landscape:w-5 landscape:h-5 animate-bounce" /> : <Video className="portrait:w-4 portrait:h-4 landscape:w-5 landscape:h-5" />}
+                      <span className="truncate">
                         {isExporting ? `${exportStatus} ${exportProgress}%` : t.exportVideo}
                       </span>
                     </button>
@@ -2333,19 +2785,19 @@ export default function App() {
                 </div>
                 
                 {exportFormat === 'webm' && (
-                  <div className="text-xs text-amber-600/80 text-center mt-2 bg-amber-50 p-2 rounded-lg">
+                  <div className="text-xs text-amber-600/80 dark:text-amber-500/90 text-center mt-2 bg-amber-50 dark:bg-amber-900/40 p-2 rounded-lg">
                     {t.webmWarning}
                   </div>
                 )}
 
                 {exportFormat === 'webm' && bgGifFrames && (
-                  <div className="text-xs text-red-600/80 text-center mt-2 bg-red-50 p-2 rounded-lg">
+                  <div className="text-xs text-red-600/80 dark:text-red-400/90 text-center mt-2 bg-red-50 dark:bg-red-900/40 p-2 rounded-lg">
                     {t.webmGifWarning}
                   </div>
                 )}
                 
                 {ffmpegError && (
-                  <div className="text-sm text-red-600 bg-red-50 border border-red-200 p-3 rounded-lg text-left whitespace-pre-wrap break-words w-full mt-2">
+                  <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/40 border border-red-200 dark:border-red-900/50 p-3 rounded-lg text-left whitespace-pre-wrap break-words w-full mt-2">
                     <span className="font-mono text-xs">{ffmpegError}</span>
                   </div>
                 )}
@@ -2353,7 +2805,7 @@ export default function App() {
             </div>
           </section>
           ) : (
-            <div className="flex flex-col items-center justify-center h-full min-h-[50vh] text-zinc-500 space-y-4">
+            <div className="flex flex-col items-center justify-center h-full min-h-[50vh] text-zinc-500 dark:text-zinc-600 space-y-4">
               <Video className="w-16 h-16 opacity-20" />
               <p>{t.noUstLoaded}</p>
             </div>

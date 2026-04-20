@@ -1,14 +1,35 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  .dark {
+    --color-zinc-950: #292831;
+    --color-zinc-900: #343340;
+    --color-zinc-800: #454353;
+    --color-zinc-700: #575566;
+    --color-zinc-600: #67657a;
+    --color-zinc-500: #838099;
+  }
+}
+
 @layer utilities {
   .bg-checkered {
     background-image: 
-      linear-gradient(45deg, #e4e4e7 25%, transparent 25%), 
-      linear-gradient(-45deg, #e4e4e7 25%, transparent 25%), 
-      linear-gradient(45deg, transparent 75%, #e4e4e7 75%), 
-      linear-gradient(-45deg, transparent 75%, #e4e4e7 75%);
+      linear-gradient(45deg, var(--color-zinc-200, #e4e4e7) 25%, transparent 25%), 
+      linear-gradient(-45deg, var(--color-zinc-200, #e4e4e7) 25%, transparent 25%), 
+      linear-gradient(45deg, transparent 75%, var(--color-zinc-200, #e4e4e7) 75%), 
+      linear-gradient(-45deg, transparent 75%, var(--color-zinc-200, #e4e4e7) 75%);
     background-size: 20px 20px;
     background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+  }
+  
+  .dark .bg-checkered {
+    background-image: 
+      linear-gradient(45deg, var(--color-zinc-800, #454353) 25%, transparent 25%), 
+      linear-gradient(-45deg, var(--color-zinc-800, #454353) 25%, transparent 25%), 
+      linear-gradient(45deg, transparent 75%, var(--color-zinc-800, #454353) 75%), 
+      linear-gradient(-45deg, transparent 75%, var(--color-zinc-800, #454353) 75%);
   }
 
   .custom-scrollbar::-webkit-scrollbar {
@@ -19,10 +40,17 @@
     background: transparent;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: #d4d4d8;
+    background: var(--color-zinc-300, #d4d4d8);
     border-radius: 4px;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: #a1a1aa;
+    background: var(--color-zinc-400, #a1a1aa);
+  }
+
+  .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--color-zinc-600, #67657a);
+  }
+  .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: var(--color-zinc-500, #838099);
   }
 }
