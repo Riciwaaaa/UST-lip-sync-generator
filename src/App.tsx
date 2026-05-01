@@ -115,7 +115,7 @@ const i18n = {
     detectedSounds: "检测到 {count} 个独立发音",
     override: "覆盖",
     change: "更换",
-    noUstLoaded: "请先在左侧导入 UST 文件",
+    noUstLoaded: "请先导入 UST/VSQX 文件",
     ffmpegNotLoaded: "FFmpeg 加载失败。请检查网络连接或刷新重试。",
     ffmpegNotLoadedAlert: "FFmpeg 未加载，无法导出视频。请检查网络连接或刷新重试。",
     conversionFailed: "转换失败: ",
@@ -141,6 +141,7 @@ const i18n = {
     notIsolatedError: "环境未开启跨域隔离 (Cross-Origin Isolated)，FFmpeg 无法加载。请检查部署配置 (如 vercel.json)。",
     renderingFrames: "正在渲染帧",
     encodingVideo: "正在编码视频...",
+    cloudFileTip: "提示: 无法读取文件，这可能是因为您选择了网盘中的文件，或是未解压的压缩包中的文件。请将文件复制到本地文件夹后再导入。",
   },
   en: {
     title: "UST Lip Sync Generator",
@@ -192,7 +193,7 @@ const i18n = {
     detectedSounds: "Detected {count} unique sounds",
     override: "Override",
     change: "Change",
-    noUstLoaded: "Please import a UST file on the left first",
+    noUstLoaded: "Please import a UST/VSQX file first",
     ffmpegNotLoaded: "FFmpeg load failed. Please check your network or refresh.",
     ffmpegNotLoadedAlert: "FFmpeg not loaded. Cannot export video. Please check your network or refresh.",
     conversionFailed: "Conversion failed: ",
@@ -218,6 +219,7 @@ const i18n = {
     notIsolatedError: "Environment is not cross-origin isolated. FFmpeg cannot load. Please check your deployment settings (e.g., vercel.json).",
     renderingFrames: "Rendering frames",
     encodingVideo: "Encoding video...",
+    cloudFileTip: "Tip: Unable to read the file. This may be because you selected a file located on a cloud drive or within an unextracted archive. Please copy the file to a local folder before importing.",
   },
   ja: {
     title: "USTリップシンクジェネレーター",
@@ -269,7 +271,7 @@ const i18n = {
     detectedSounds: "{count} 個の独立した発音を検出",
     override: "上書き",
     change: "変更",
-    noUstLoaded: "先に左側でUSTファイルをインポートしてください",
+    noUstLoaded: "UST/VSQXファイルをインポートしてください",
     ffmpegNotLoaded: "FFmpegの読み込みに失敗しました。ネットワークを確認するか、リロードしてください。",
     ffmpegNotLoadedAlert: "FFmpegが読み込まれていません。動画を出力できません。ネットワークを確認するか、リロードしてください。",
     conversionFailed: "変換失敗: ",
@@ -295,6 +297,7 @@ const i18n = {
     notIsolatedError: "環境がクロスオリジン分離(Cross-Origin Isolated)されていません。FFmpegを読み込めません。デプロイ設定(vercel.jsonなど)を確認してください。",
     renderingFrames: "フレームをレンダリング中",
     encodingVideo: "動画をエンコード中...",
+    cloudFileTip: "注意：ファイルを読み込めません。クラウドドライブ上のファイル、または未解凍の圧縮ファイル内のファイルを選択した可能性があります。ファイルをローカルフォルダにコピーしてからインポートしてください。",
   }
 };
 
@@ -1867,20 +1870,17 @@ export default function App() {
         } catch (err) {
           console.error("Outer Error Caught:", err);
           const errMsg = err instanceof Error ? err.message : String(err);
-          setError(t.parseError + " " + errMsg);
-          alert(t.parseError + "\n\nDetails: " + errMsg);
+          setError(`${t.parseError} \n${errMsg}`);
         }
       } else {
         console.error("file read error, buffer:", buffer);
         const reason = buffer ? "empty file" : "read failed";
-        setError(t.fileReadError + " (" + reason + ")");
-        alert(t.fileReadError + "\n\nDetails: " + reason);
+        setError(`${t.fileReadError} (${reason}). \n${t.cloudFileTip}`);
       }
     } catch (e) {
       console.error("FileReader equivalent error:", e);
       const errMsg = e instanceof Error ? e.message : String(e);
-      setError(t.fileReadError + " " + errMsg);
-      alert(t.fileReadError + "\n\nDetails: " + errMsg + "\n\nTip: If you're dragging from a zip file or temp folder, try extracting to desktop first.");
+      setError(`${t.fileReadError} \n${errMsg} \n\n${t.cloudFileTip}`);
     }
   };
 
@@ -2437,7 +2437,7 @@ export default function App() {
               onClick={() => fileInputRef.current?.click()}
               className={(isDragging) => `
                 relative group cursor-pointer flex flex-col items-center justify-center 
-                w-full portrait:h-24 landscape:h-48 portrait:rounded-2xl landscape:rounded-3xl border-2 border-dashed transition-all duration-300 ease-out
+                w-full portrait:h-24 landscape:h-48 portrait:rounded-2xl landscape:rounded-3xl border-2 border-dashed transition-transform duration-300 ease-out
                 ${isDragging 
                   ? 'border-emerald-500 bg-emerald-500/10 scale-[1.02]' 
                   : 'border-zinc-200 dark:border-zinc-700 bg-white/50 dark:bg-zinc-800/50 hover:border-zinc-300 dark:hover:border-zinc-600 hover:bg-white dark:hover:bg-zinc-800'}
@@ -2447,7 +2447,7 @@ export default function App() {
                 <>
                   <input type="file" ref={fileInputRef} onChange={(e) => e.target.files && handleFile(e.target.files[0])} accept=".ust,.ustx,.vsqx" className="hidden" />
                   <div className="flex portrait:flex-row landscape:flex-col items-center portrait:space-x-4 landscape:space-y-4 pointer-events-none">
-                    <div className={`p-2 landscape:p-4 rounded-full transition-colors duration-300 ${isDragging ? 'bg-emerald-500/20 text-emerald-600 dark:bg-emerald-500/30 dark:text-emerald-400' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 group-hover:text-zinc-700 dark:group-hover:text-zinc-300'}`}>
+                    <div className={`p-2 landscape:p-4 rounded-full ${isDragging ? 'bg-emerald-500/20 text-emerald-600 dark:bg-emerald-500/30 dark:text-emerald-400' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 group-hover:text-zinc-700 dark:group-hover:text-zinc-300'}`}>
                       <FileText className="w-6 h-6 landscape:w-8 landscape:h-8" />
                     </div>
                     <div className="portrait:text-left landscape:text-center portrait:space-y-0 landscape:space-y-1">
@@ -2483,7 +2483,7 @@ export default function App() {
               accept="audio/*"
               className={(isDragging) => `
                 relative group cursor-pointer flex flex-col items-center justify-center 
-                w-full portrait:h-24 landscape:h-48 portrait:rounded-2xl landscape:rounded-3xl border-2 border-dashed transition-all duration-300 ease-out
+                w-full portrait:h-24 landscape:h-48 portrait:rounded-2xl landscape:rounded-3xl border-2 border-dashed transition-transform duration-300 ease-out
                 ${isDragging 
                   ? 'border-emerald-500 bg-emerald-500/10 scale-[1.02]' 
                   : 'border-zinc-200 dark:border-zinc-700 bg-white/50 dark:bg-zinc-800/50 hover:border-zinc-300 dark:hover:border-zinc-600 hover:bg-white dark:hover:bg-zinc-800'}
@@ -2495,7 +2495,7 @@ export default function App() {
                     <input type="file" accept="audio/*" onChange={handleAudioUpload} className="hidden" />
                   </label>
                   <div className="flex portrait:flex-row landscape:flex-col items-center portrait:space-x-4 landscape:space-y-4 pointer-events-none">
-                    <div className={`p-2 landscape:p-4 rounded-full transition-colors duration-300 ${isDragging ? 'bg-emerald-500/20 text-emerald-600 dark:bg-emerald-500/30 dark:text-emerald-400' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 group-hover:text-zinc-700 dark:group-hover:text-zinc-300'}`}>
+                    <div className={`p-2 landscape:p-4 rounded-full ${isDragging ? 'bg-emerald-500/20 text-emerald-600 dark:bg-emerald-500/30 dark:text-emerald-400' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 group-hover:text-zinc-700 dark:group-hover:text-zinc-300'}`}>
                       <Music className="w-6 h-6 landscape:w-8 landscape:h-8" />
                     </div>
                     <div className="portrait:text-left landscape:text-center portrait:space-y-0 landscape:space-y-1">
@@ -2560,7 +2560,7 @@ export default function App() {
               accept="image/*"
               className={(isDragging) => `
                 relative group cursor-pointer flex flex-col items-center justify-center 
-                w-full portrait:h-24 landscape:h-48 portrait:rounded-2xl landscape:rounded-3xl border-2 border-dashed transition-all duration-300 ease-out overflow-hidden
+                w-full portrait:h-24 landscape:h-48 portrait:rounded-2xl landscape:rounded-3xl border-2 border-dashed transition-transform duration-300 ease-out overflow-hidden
                 ${isDragging 
                   ? 'border-emerald-500 bg-emerald-500/10 scale-[1.02]' 
                   : 'border-zinc-200 dark:border-zinc-700 bg-white/50 dark:bg-zinc-800/50 hover:border-zinc-300 dark:hover:border-zinc-600 hover:bg-white dark:hover:bg-zinc-800'}
@@ -2577,7 +2577,7 @@ export default function App() {
                     <div className="absolute inset-0 w-full h-full opacity-50 pointer-events-none" style={{ backgroundColor }} />
                   ) : null}
                   <div className="flex portrait:flex-row landscape:flex-col items-center portrait:space-x-4 landscape:space-y-4 z-10 pointer-events-none landscape:w-full landscape:px-4">
-                    <div className={`p-2 landscape:p-4 rounded-full transition-colors duration-300 ${isDragging ? 'bg-emerald-500/20 text-emerald-600 dark:bg-emerald-500/30 dark:text-emerald-400' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 group-hover:text-zinc-700 dark:group-hover:text-zinc-300'}`}>
+                    <div className={`p-2 landscape:p-4 rounded-full ${isDragging ? 'bg-emerald-500/20 text-emerald-600 dark:bg-emerald-500/30 dark:text-emerald-400' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 group-hover:text-zinc-700 dark:group-hover:text-zinc-300'}`}>
                       <Layers className="w-6 h-6 landscape:w-8 landscape:h-8" />
                     </div>
                     <div className="portrait:text-left landscape:text-center portrait:space-y-0 landscape:space-y-1">
@@ -2602,7 +2602,7 @@ export default function App() {
                     className="absolute bottom-4 right-4 z-20"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <label className="flex items-center justify-center w-10 h-10 bg-white/80 dark:bg-zinc-800/80 hover:bg-white dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-full shadow-sm backdrop-blur-sm cursor-pointer transition-colors border border-zinc-200 dark:border-zinc-700" title="Solid Color Background">
+                    <label className="flex items-center justify-center w-10 h-10 bg-white/80 dark:bg-zinc-800/80 hover:bg-white dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-full shadow-sm backdrop-blur-sm cursor-pointer border border-zinc-200 dark:border-zinc-700" title="Solid Color Background">
                       <span className="text-lg">🎨</span>
                       <input 
                         type="color" 
@@ -2618,9 +2618,9 @@ export default function App() {
           </div>
 
           {error && (
-            <div className="flex items-center space-x-2 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600">
-              <AlertCircle className="w-5 h-5 flex-shrink-0" />
-              <p className="text-sm font-medium">{error}</p>
+            <div className="flex items-start space-x-2 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600">
+              <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              <p className="text-sm font-medium whitespace-pre-wrap">{error}</p>
             </div>
           )}
         </section>
@@ -2698,7 +2698,7 @@ export default function App() {
                      portrait:w-full portrait:h-1 portrait:cursor-row-resize 
                      landscape:w-1 landscape:h-full landscape:cursor-col-resize 
                      bg-zinc-200 dark:bg-zinc-700
-                     hover:bg-indigo-400 dark:hover:bg-indigo-500 active:bg-indigo-500 dark:active:bg-indigo-600 transition-colors duration-200"
+                     hover:bg-indigo-400 dark:hover:bg-indigo-500 active:bg-indigo-500 dark:active:bg-indigo-600"
           onMouseDown={() => setIsDraggingDivider(true)}
           onTouchStart={() => setIsDraggingDivider(true)}
         >
@@ -2706,7 +2706,7 @@ export default function App() {
           <div className="absolute portrait:w-full portrait:-top-2 portrait:-bottom-2 landscape:h-full landscape:-left-2 landscape:-right-2 z-0" />
           
           {/* Handle icon */}
-          <div className="absolute bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-full flex items-center justify-center shadow-sm text-zinc-400 dark:text-zinc-500 group-hover:text-white dark:group-hover:text-white group-hover:bg-indigo-400 dark:group-hover:bg-indigo-500 group-hover:border-transparent portrait:w-8 portrait:h-3 landscape:w-3 landscape:h-8 z-10 transition-all pointer-events-none">
+          <div className="absolute bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-full flex items-center justify-center shadow-sm text-zinc-400 dark:text-zinc-500 group-hover:text-white dark:group-hover:text-white group-hover:bg-indigo-400 dark:group-hover:bg-indigo-500 group-hover:border-transparent portrait:w-8 portrait:h-3 landscape:w-3 landscape:h-8 z-10 pointer-events-none">
             <span className="portrait:rotate-90 text-[10px] leading-none mb-0.5">⋮</span>
           </div>
         </div>
