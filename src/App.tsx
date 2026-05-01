@@ -6,6 +6,7 @@ import coreURL from '@ffmpeg/core?url';
 import wasmURL from '@ffmpeg/core/wasm?url';
 import { parseGIF, decompressFrames } from 'gifuct-js';
 import yaml from 'js-yaml';
+import Encoding from 'encoding-japanese';
 import { DragDropWrapper } from './components/DragDropWrapper';
 
 interface NoteData {
@@ -864,7 +865,7 @@ export default function App() {
     const lastNote = data.notes[data.notes.length - 1];
     const totalDuration = lastNote ? lastNote.startTimeMs + lastNote.durationMs : 0;
 
-    if (newTime >= totalDuration) {
+    if (newTime >= totalDuration && totalDuration > 0) {
       setIsPlaying(false);
       isPlayingRef.current = false;
       setCurrentTime(totalDuration);
@@ -882,20 +883,23 @@ export default function App() {
 
     setCurrentTime(newTime);
     
-    const visualTime = newTime - (audioOffsetRef.current * 1000);
+    let visualTime = newTime - (audioOffsetRef.current * 1000);
+    // Add safety limit
+    if (visualTime < 0) visualTime = 0;
 
     let activeNote: NoteData | null = null;
-    let l = 0, r = data.notes.length - 1;
-    while (l <= r) {
-      const m = Math.floor((l + r) / 2);
-      const note = data.notes[m];
+    
+    // Linear scan to inherently support overlapping notes
+    for (let i = data.notes.length - 1; i >= 0; i--) {
+      const note = data.notes[i];
       if (visualTime >= note.startTimeMs && visualTime < note.startTimeMs + note.durationMs) {
-        activeNote = note;
+        // Handle slurs: if lyric is '+', we inherit from the previous valid note
+        let searchIdx = i;
+        while (searchIdx >= 0 && (data.notes[searchIdx].lyric === '+' || data.notes[searchIdx].lyric === '-')) {
+           searchIdx--;
+        }
+        activeNote = searchIdx >= 0 ? data.notes[searchIdx] : note;
         break;
-      } else if (visualTime < note.startTimeMs) {
-        r = m - 1;
-      } else {
-        l = m + 1;
       }
     }
 
@@ -1002,17 +1006,15 @@ export default function App() {
       if (data) {
         const visualTime = time - (audioOffsetRef.current * 1000);
         let activeNote: NoteData | null = null;
-        let l = 0, r = data.notes.length - 1;
-        while (l <= r) {
-          const m = Math.floor((l + r) / 2);
-          const note = data.notes[m];
+        for (let i = data.notes.length - 1; i >= 0; i--) {
+          const note = data.notes[i];
           if (visualTime >= note.startTimeMs && visualTime < note.startTimeMs + note.durationMs) {
-            activeNote = note;
+            let searchIdx = i;
+            while (searchIdx >= 0 && (data.notes[searchIdx].lyric === '+' || data.notes[searchIdx].lyric === '-')) {
+              searchIdx--;
+            }
+            activeNote = searchIdx >= 0 ? data.notes[searchIdx] : note;
             break;
-          } else if (visualTime < note.startTimeMs) {
-            r = m - 1;
-          } else {
-            l = m + 1;
           }
         }
         const mouth = activeNote ? getMouthShape(activeNote.lyric) : 'default';
@@ -1079,10 +1081,18 @@ export default function App() {
           let mouth: MouthShape = 'default';
           let lyric = '';
           
-          const activeNote = parsedDataRef.current.notes.find(n => visualTime >= n.startTimeMs && visualTime < n.startTimeMs + n.durationMs);
-          if (activeNote) {
-            mouth = getMouthShape(activeNote.lyric);
-            lyric = activeNote.lyric;
+          for (let k = parsedDataRef.current.notes.length - 1; k >= 0; k--) {
+            const n = parsedDataRef.current.notes[k];
+            if (visualTime >= n.startTimeMs && visualTime < n.startTimeMs + n.durationMs) {
+              let searchIdx = k;
+              while (searchIdx >= 0 && (parsedDataRef.current.notes[searchIdx].lyric === '+' || parsedDataRef.current.notes[searchIdx].lyric === '-')) {
+                searchIdx--;
+              }
+              const activeNote = searchIdx >= 0 ? parsedDataRef.current.notes[searchIdx] : n;
+              mouth = getMouthShape(activeNote.lyric);
+              lyric = activeNote.lyric;
+              break;
+            }
           }
 
           drawCanvas(mouth, visualTime, lyric, isTransparent); // Skip background if transparent
@@ -1504,18 +1514,19 @@ export default function App() {
       const parts = originalLyric.split(' ');
       const cleanedLyric = parts[parts.length - 1];
 
+      const durationTick = n.duration !== undefined ? n.duration : (n.length || 0);
       const startTimeMs = partOffsetMs + ((n.position || 0) * msPerTick);
-      const durationMs = (n.length || 0) * msPerTick;
+      const durationMs = durationTick * msPerTick;
       
       return {
         index: i + 1,
         originalLyric: originalLyric,
         lyric: cleanedLyric,
-        length: n.length || 0,
+        length: durationTick,
         startTimeMs,
         durationMs
       };
-    });
+    }).sort((a: NoteData, b: NoteData) => a.startTimeMs - b.startTimeMs);
 
     const newData = { tempo: bpm, notes };
     parsedDataRef.current = newData;
@@ -1528,6 +1539,12 @@ export default function App() {
       }
     });
     setUniqueLyrics(Array.from(unique));
+    
+    setCurrentTime(0);
+    setCurrentMouth('default');
+    setIsPlaying(false);
+    isPlayingRef.current = false;
+    if (reqRef.current) cancelAnimationFrame(reqRef.current);
     
     setShowTrackSelector(false);
   };
@@ -1642,7 +1659,7 @@ export default function App() {
         startTimeMs,
         durationMs
       };
-    });
+    }).sort((a: NoteData, b: NoteData) => a.startTimeMs - b.startTimeMs);
 
     const newData = { tempo: bpm, notes };
     parsedDataRef.current = newData;
@@ -1656,93 +1673,116 @@ export default function App() {
     });
     setUniqueLyrics(Array.from(unique));
     
+    setCurrentTime(0);
+    setCurrentMouth('default');
+    setIsPlaying(false);
+    isPlayingRef.current = false;
+    if (reqRef.current) cancelAnimationFrame(reqRef.current);
+    
     setShowTrackSelector(false);
   };
 
   const parseUst = (content: string) => {
-    const lines = content.split(/\r?\n/);
-    let currentTempo = 120;
-    let currentSection = '';
-    let currentNote: any = {};
-    const notes: NoteData[] = [];
+    try {
+      const lines = content.split(/\r\n|\n|\r/);
+      let currentTempo = 120;
+      let currentSection = '';
+      let currentNote: Partial<NoteData> & { indexStr?: string } = {};
+      const notes: NoteData[] = [];
 
-    for (const line of lines) {
-      const trimmedLine = line.trim();
-      if (!trimmedLine) continue;
+      for (const line of lines) {
+        const trimmedLine = line.trim();
+        if (!trimmedLine) continue;
 
-      const sectionMatch = trimmedLine.match(/^\[#(.+)\]$/);
-      if (sectionMatch) {
-        if (currentSection.match(/^\d+$/) && currentNote.length !== undefined && currentNote.originalLyric !== undefined) {
-          notes.push({
-            index: notes.length + 1,
-            originalLyric: currentNote.originalLyric,
-            lyric: currentNote.lyric || '',
-            length: currentNote.length,
-            startTimeMs: 0,
-            durationMs: 0,
-          });
+        const sectionMatch = trimmedLine.match(/^\[#(.+)\]$/) || trimmedLine.match(/^\uFEFF?\[#(.+)\]$/);
+        if (sectionMatch) {
+          // Push previous note safely if it was an actual note
+          if (currentSection.match(/^\d+$/) && currentNote) {
+            notes.push({
+              index: notes.length + 1,
+              originalLyric: currentNote.originalLyric || 'R',
+              lyric: currentNote.lyric || 'R',
+              length: currentNote.length || 480,
+              startTimeMs: 0,
+              durationMs: 0,
+            });
+          }
+          
+          currentSection = sectionMatch[1];
+          if (currentSection.match(/^\d+$/)) {
+            // Initialize new note
+            currentNote = { indexStr: currentSection, length: 480, lyric: 'R', originalLyric: 'R' };
+          } else {
+            currentNote = {};
+          }
+          continue;
         }
-        currentSection = sectionMatch[1];
-        if (currentSection.match(/^\d+$/)) {
-          currentNote = { index: currentSection };
+
+        const equalIndex = trimmedLine.indexOf('=');
+        if (equalIndex !== -1) {
+          const key = trimmedLine.substring(0, equalIndex).trim().toLowerCase();
+          const value = trimmedLine.substring(equalIndex + 1).trim();
+
+          if (currentSection === 'SETTING' && key === 'tempo') {
+            const parsedTempo = parseFloat(value.replace(',', '.')); // Handle locale commas
+            if (!isNaN(parsedTempo) && parsedTempo > 0) {
+              currentTempo = parsedTempo;
+            }
+          } else if (currentSection.match(/^\d+$/)) {
+            if (key === 'length') {
+              const parsedLen = parseInt(value, 10);
+              if (!isNaN(parsedLen)) currentNote.length = parsedLen;
+            } else if (key === 'lyric') {
+              currentNote.originalLyric = value || 'R';
+              const parts = currentNote.originalLyric.split(' ');
+              currentNote.lyric = parts[parts.length - 1] || 'R';
+            }
+          }
         }
-        continue;
       }
 
-      const equalIndex = trimmedLine.indexOf('=');
-      if (equalIndex !== -1) {
-        const key = trimmedLine.substring(0, equalIndex).trim();
-        const value = trimmedLine.substring(equalIndex + 1).trim();
-
-        if (currentSection === 'SETTING' && key === 'Tempo') {
-          const parsedTempo = parseFloat(value);
-          if (!isNaN(parsedTempo) && parsedTempo > 0) {
-            currentTempo = parsedTempo;
-          }
-        } else if (currentSection.match(/^\d+$/)) {
-          if (key === 'Length') {
-            currentNote.length = parseInt(value, 10);
-          } else if (key === 'Lyric') {
-            currentNote.originalLyric = value;
-            const parts = value.split(' ');
-            currentNote.lyric = parts[parts.length - 1];
-          }
-        }
+      if (currentSection.match(/^\d+$/) && currentNote) {
+        notes.push({
+          index: notes.length + 1,
+          originalLyric: currentNote.originalLyric || 'R',
+          lyric: currentNote.lyric || 'R',
+          length: currentNote.length || 480,
+          startTimeMs: 0,
+          durationMs: 0,
+        });
       }
-    }
 
-    if (currentSection.match(/^\d+$/) && currentNote.length !== undefined && currentNote.originalLyric !== undefined) {
-      notes.push({
-        index: notes.length + 1,
-        originalLyric: currentNote.originalLyric,
-        lyric: currentNote.lyric || '',
-        length: currentNote.length,
-        startTimeMs: 0,
-        durationMs: 0,
+      if (notes.length === 0) {
+        console.log("Failed to parse UST. First 200 chars of content:", content.substring(0, 200));
+        console.log("Lines length:", lines.length);
+        throw new Error("No notes found in .ust file (maybe corrupted?)");
+      }
+
+      const finalNotes = recalculateTimings(notes, currentTempo);
+
+      const newData = { tempo: currentTempo, notes: finalNotes };
+      parsedDataRef.current = newData;
+      setParsedData(newData);
+      
+      const unique = new Set<string>();
+      notes.forEach((note: NoteData) => {
+        if (note.lyric && note.lyric !== 'R' && note.lyric !== '息' && note.lyric !== '休' && note.lyric !== '+') {
+          unique.add(note.lyric);
+        }
       });
+      setUniqueLyrics(Array.from(unique));
+
+      setCurrentTime(0);
+      setCurrentMouth('default');
+      setShowTrackSelector(false);
+      
+      setIsPlaying(false);
+      isPlayingRef.current = false;
+      if (reqRef.current) cancelAnimationFrame(reqRef.current);
+    } catch (err) {
+      console.error("UST Parse Error:", err);
+      throw err;
     }
-
-    const finalNotes = recalculateTimings(notes, currentTempo);
-
-    const newData = { tempo: currentTempo, notes: finalNotes };
-    parsedDataRef.current = newData;
-    setParsedData(newData);
-    
-    // 提取唯一歌词
-    const unique = new Set<string>();
-    notes.forEach(note => {
-      if (note.lyric && note.lyric !== 'R' && note.lyric !== '息') {
-        unique.add(note.lyric);
-      }
-    });
-    setUniqueLyrics(Array.from(unique));
-
-    setCurrentTime(0);
-    setCurrentMouth('default');
-    
-    setIsPlaying(false);
-    isPlayingRef.current = false;
-    if (reqRef.current) cancelAnimationFrame(reqRef.current);
   };
 
   const handleLyricChange = (index: number, newValue: string) => {
@@ -1772,7 +1812,7 @@ export default function App() {
     }
   };
 
-  const handleFile = (file: File | undefined | null) => {
+  const handleFile = async (file: File | undefined | null) => {
     if (!file) return;
     setError('');
     
@@ -1785,11 +1825,38 @@ export default function App() {
     const isUstx = file.name.toLowerCase().endsWith('.ustx');
     const isVsqx = file.name.toLowerCase().endsWith('.vsqx');
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const result = e.target?.result;
-      if (typeof result === 'string') {
+    try {
+      const buffer = await file.arrayBuffer();
+      if (buffer && buffer.byteLength > 0) {
         try {
+          let result = '';
+          if (isUstx || isVsqx) {
+            result = new TextDecoder('utf-8').decode(buffer);
+          } else {
+            try {
+              const uint8Array = new Uint8Array(buffer);
+              const detected = Encoding.detect(uint8Array);
+              const detectedStr = detected ? detected.toString().toUpperCase() : 'SJIS';
+              
+              if (detectedStr.includes('UTF8') || detectedStr.includes('UNICODE')) {
+                result = new TextDecoder('utf-8').decode(buffer);
+              } else if (detectedStr === 'UTF16' || detectedStr === 'UTF16LE') {
+                result = new TextDecoder('utf-16le').decode(buffer);
+              } else if (detectedStr === 'UTF16BE') {
+                result = new TextDecoder('utf-16be').decode(buffer);
+              } else {
+                result = Encoding.convert(uint8Array, {
+                  to: 'UNICODE',
+                  from: detected || 'SJIS',
+                  type: 'string'
+                }) as unknown as string;
+              }
+            } catch (encodingErr) {
+              console.error("encoding-japanese failed, falling back to utf-8 decoder:", encodingErr);
+              result = new TextDecoder('utf-8').decode(buffer);
+            }
+          }
+          
           if (isUstx) {
             parseUstx(result);
           } else if (isVsqx) {
@@ -1798,16 +1865,25 @@ export default function App() {
             parseUst(result);
           }
         } catch (err) {
-          console.error(err);
-          setError(t.parseError);
+          console.error("Outer Error Caught:", err);
+          const errMsg = err instanceof Error ? err.message : String(err);
+          setError(t.parseError + " " + errMsg);
+          alert(t.parseError + "\n\nDetails: " + errMsg);
         }
       } else {
-        setError(t.fileReadError);
+        console.error("file read error, buffer:", buffer);
+        const reason = buffer ? "empty file" : "read failed";
+        setError(t.fileReadError + " (" + reason + ")");
+        alert(t.fileReadError + "\n\nDetails: " + reason);
       }
-    };
-    reader.onerror = () => setError(t.fileReadError);
-    reader.readAsText(file, (isUstx || isVsqx) ? 'UTF-8' : 'Shift_JIS');
+    } catch (e) {
+      console.error("FileReader equivalent error:", e);
+      const errMsg = e instanceof Error ? e.message : String(e);
+      setError(t.fileReadError + " " + errMsg);
+      alert(t.fileReadError + "\n\nDetails: " + errMsg + "\n\nTip: If you're dragging from a zip file or temp folder, try extracting to desktop first.");
+    }
   };
+
 
   const handleClearMouthImage = (shape: MouthShape, e: React.MouseEvent) => {
     e.preventDefault();
@@ -2203,7 +2279,7 @@ export default function App() {
           <div className="w-full h-max landscape:[direction:ltr] portrait:p-4 landscape:p-8 portrait:space-y-6 landscape:space-y-12">
             
             {/* Big Title Header */}
-          <header className="space-y-1 landscape:space-y-3 text-center mt-4 landscape:mt-0">
+          <header className="space-y-1 landscape:space-y-3 text-center portrait:pt-20 landscape:mt-0">
             <h1 className="text-[clamp(1.5rem,6vw,2.25rem)] xl:text-4xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50 leading-tight px-4">
               {t.title}
             </h1>
