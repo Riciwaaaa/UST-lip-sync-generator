@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, DragEvent, ChangeEvent } from 'react';
-import { UploadCloud, FileText, AlertCircle, Clock, Music, Play, Pause, Image as ImageIcon, Video, Download, Settings, Layers, X, Globe, Sun, Moon } from 'lucide-react';
+import { UploadCloud, FileText, AlertCircle, Clock, Music, Play, Pause, Image as ImageIcon, Video, Download, Settings, Layers, X, Globe, Sun, Moon, Github } from 'lucide-react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 import coreURL from '@ffmpeg/core?url';
@@ -2182,6 +2182,15 @@ export default function App() {
         >
           {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
         </button>
+        <a 
+          href="https://github.com/Riciwaaaa/UST-lip-sync-generator" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="p-2 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm shadow-md border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-full transition-all"
+          title="GitHub Repository"
+        >
+          <Github className="w-5 h-5" />
+        </a>
         <button 
           onClick={() => setShowModal(true)} 
           className="p-2 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm shadow-md border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-full transition-all"
@@ -2206,6 +2215,15 @@ export default function App() {
             >
               {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </button>
+            <a 
+              href="https://github.com/Riciwaaaa/UST-lip-sync-generator" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 rounded-full transition-all"
+              title="GitHub Repository"
+            >
+              <Github className="w-5 h-5" />
+            </a>
             <button 
               onClick={() => setShowModal(true)} 
               className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 rounded-full transition-all"
