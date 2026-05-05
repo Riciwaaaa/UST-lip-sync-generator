@@ -1512,24 +1512,32 @@ export default function App() {
 
     const partOffsetMs = (part.position || 0) * msPerTick;
 
-    const notes: NoteData[] = part.notes.map((n: any, i: number) => {
-      const originalLyric = n.lyric || '';
-      const parts = originalLyric.split(' ');
-      const cleanedLyric = parts[parts.length - 1];
+    let currentTick = 0;
+    const notes: NoteData[] = part.notes
+      .map((n: any, i: number) => {
+        const originalLyric = n.lyric || '';
+        const parts = originalLyric.split(' ');
+        const cleanedLyric = parts[parts.length - 1];
 
-      const durationTick = n.duration !== undefined ? n.duration : (n.length || 0);
-      const startTimeMs = partOffsetMs + ((n.position || 0) * msPerTick);
-      const durationMs = durationTick * msPerTick;
-      
-      return {
-        index: i + 1,
-        originalLyric: originalLyric,
-        lyric: cleanedLyric,
-        length: durationTick,
-        startTimeMs,
-        durationMs
-      };
-    }).sort((a: NoteData, b: NoteData) => a.startTimeMs - b.startTimeMs);
+        const durationTick = n.duration !== undefined ? n.duration : (n.length || 0);
+        const posTick = n.position !== undefined ? n.position : (n.pos !== undefined ? n.pos : currentTick);
+        
+        const startTimeMs = partOffsetMs + (posTick * msPerTick);
+        const durationMs = durationTick * msPerTick;
+        
+        currentTick = posTick + durationTick;
+        
+        return {
+          index: i + 1,
+          originalLyric: originalLyric,
+          lyric: cleanedLyric,
+          length: durationTick,
+          startTimeMs,
+          durationMs
+        };
+      })
+      .filter((n: NoteData) => n.originalLyric !== 'R' && n.originalLyric !== 'r')
+      .sort((a: NoteData, b: NoteData) => a.startTimeMs - b.startTimeMs);
 
     const newData = { tempo: bpm, notes };
     parsedDataRef.current = newData;
