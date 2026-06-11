@@ -39,11 +39,18 @@ const getMouthShape = (lyric: string): MouthShape => {
   }
 
   const kanaMap: Record<string, MouthShape> = {
+    // hiragana
     'あ':'a', 'か':'a', 'さ':'a', 'た':'a', 'な':'a', 'は':'a', 'ま':'a', 'や':'a', 'ら':'a', 'わ':'a', 'が':'a', 'ざ':'a', 'だ':'a', 'ば':'a', 'ぱ':'a', 'ぁ':'a', 'ゃ':'a',
     'い':'i', 'き':'i', 'し':'i', 'ち':'i', 'に':'i', 'ひ':'i', 'み':'i', 'り':'i', 'ぎ':'i', 'じ':'i', 'ぢ':'i', 'び':'i', 'ぴ':'i', 'ぃ':'i',
     'う':'u', 'く':'u', 'す':'u', 'つ':'u', 'ぬ':'u', 'ふ':'u', 'む':'u', 'ゆ':'u', 'る':'u', 'ぐ':'u', 'ず':'u', 'づ':'u', 'ぶ':'u', 'ぷ':'u', 'ぅ':'u', 'ゅ':'u',
     'え':'e', 'け':'e', 'せ':'e', 'て':'e', 'ね':'e', 'へ':'e', 'め':'e', 'れ':'e', 'げ':'e', 'ぜ':'e', 'で':'e', 'べ':'e', 'ぺ':'e', 'ぇ':'e',
     'お':'o', 'こ':'o', 'そ':'o', 'と':'o', 'の':'o', 'ほ':'o', 'も':'o', 'よ':'o', 'ろ':'o', 'を':'o', 'ご':'o', 'ぞ':'o', 'ど':'o', 'ぼ':'o', 'ぽ':'o', 'ぉ':'o', 'ょ':'o',
+    // katakana (mirrors hiragana row-for-row; VSQX/VOCALOID commonly uses katakana)
+    'ア':'a', 'カ':'a', 'サ':'a', 'タ':'a', 'ナ':'a', 'ハ':'a', 'マ':'a', 'ヤ':'a', 'ラ':'a', 'ワ':'a', 'ガ':'a', 'ザ':'a', 'ダ':'a', 'バ':'a', 'パ':'a', 'ァ':'a', 'ャ':'a',
+    'イ':'i', 'キ':'i', 'シ':'i', 'チ':'i', 'ニ':'i', 'ヒ':'i', 'ミ':'i', 'リ':'i', 'ギ':'i', 'ジ':'i', 'ヂ':'i', 'ビ':'i', 'ピ':'i', 'ィ':'i',
+    'ウ':'u', 'ク':'u', 'ス':'u', 'ツ':'u', 'ヌ':'u', 'フ':'u', 'ム':'u', 'ユ':'u', 'ル':'u', 'グ':'u', 'ズ':'u', 'ヅ':'u', 'ブ':'u', 'プ':'u', 'ゥ':'u', 'ュ':'u', 'ヴ':'u',
+    'エ':'e', 'ケ':'e', 'セ':'e', 'テ':'e', 'ネ':'e', 'ヘ':'e', 'メ':'e', 'レ':'e', 'ゲ':'e', 'ゼ':'e', 'デ':'e', 'ベ':'e', 'ペ':'e', 'ェ':'e',
+    'オ':'o', 'コ':'o', 'ソ':'o', 'ト':'o', 'ノ':'o', 'ホ':'o', 'モ':'o', 'ヨ':'o', 'ロ':'o', 'ヲ':'o', 'ゴ':'o', 'ゾ':'o', 'ド':'o', 'ボ':'o', 'ポ':'o', 'ォ':'o', 'ョ':'o',
   };
 
   for (let i = cleanLyric.length - 1; i >= 0; i--) {
@@ -142,6 +149,11 @@ const i18n = {
     renderingFrames: "正在渲染帧",
     encodingVideo: "正在编码视频...",
     cloudFileTip: "提示: 无法读取文件，这可能是因为您选择了网盘中的文件，或是未解压的压缩包中的文件。请将文件复制到本地文件夹后再导入。",
+    exportErrMimeType: "当前浏览器不支持直接导出此格式，请尝试更换导出格式，或使用 Chrome / Edge 浏览器重试。",
+    exportErrFs: "文件处理异常，可能是因为处理速度过快或缓存出错。请刷新页面后重试。",
+    exportErrMemory: "设备内存不足。视频渲染需要耗费大量内存，强烈建议关闭其他多余网页，或改用电脑端浏览器进行导出。",
+    exportErrSab: "您的浏览器环境不支持高性能多线程渲染。请更换为最新的 PC 端 Chrome 或 Edge 浏览器。",
+    exportErrGeneric: "导出失败，发生异常。请尝试刷新页面、更换导出格式，或使用全屏录制作为备用方案。错误详情：{error}",
   },
   en: {
     title: "UST Lip Sync Generator",
@@ -220,6 +232,11 @@ const i18n = {
     renderingFrames: "Rendering frames",
     encodingVideo: "Encoding video...",
     cloudFileTip: "Tip: Unable to read the file. This may be because you selected a file located on a cloud drive or within an unextracted archive. Please copy the file to a local folder before importing.",
+    exportErrMimeType: "This export format is not supported by your browser. Try a different format or use Chrome / Edge.",
+    exportErrFs: "File processing error, possibly due to a cache issue. Please refresh the page and try again.",
+    exportErrMemory: "Device is low on memory. Close other tabs or switch to a PC browser for exporting.",
+    exportErrSab: "Your browser does not support high-performance multi-threaded rendering. Please use the latest Chrome or Edge on PC.",
+    exportErrGeneric: "Export failed. Try refreshing the page, switching export format, or using Fullscreen mode as a fallback. Error: {error}",
   },
   ja: {
     title: "USTリップシンクジェネレーター",
@@ -298,15 +315,21 @@ const i18n = {
     renderingFrames: "フレームをレンダリング中",
     encodingVideo: "動画をエンコード中...",
     cloudFileTip: "注意：ファイルを読み込めません。クラウドドライブ上のファイル、または未解凍の圧縮ファイル内のファイルを選択した可能性があります。ファイルをローカルフォルダにコピーしてからインポートしてください。",
+    exportErrMimeType: "このブラウザはこの形式の直接エクスポートに対応していません。形式を変えるか、Chrome / Edge をお試しください。",
+    exportErrFs: "ファイル処理中にエラーが発生しました。ページを更新して再試行してください。",
+    exportErrMemory: "デバイスのメモリが不足しています。不要なタブを閉じるか、PCブラウザを使用してエクスポートしてください。",
+    exportErrSab: "お使いのブラウザ環境は高性能なマルチスレッドレンダリングに対応していません。最新のPC版Chrome / Edgeをお使いください。",
+    exportErrGeneric: "エクスポートに失敗しました。ページを更新して再試行するか、エクスポート形式を変更するか、全画面録画をお試しください。エラー: {error}",
   }
 };
 
 const isFragileEnvironment = () => {
   const ua = navigator.userAgent || navigator.vendor || (window as any).opera;
   const isIOS = /iPad|iPhone|iPod/.test(ua) && !(window as any).MSStream;
-  const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
   const isInApp = /FBAN|FBAV|Twitter|Line|MicroMessenger|Instagram/i.test(ua);
-  return isIOS || isSafari || isInApp;
+  // isSafari (desktop macOS) removed — iOS is already caught by isIOS, and desktop
+  // Safari doesn't have the same memory constraints that justify blocking the export flow.
+  return isIOS || isInApp;
 };
 
 const getMouthShapeConfigs = (t: any): { id: MouthShape; label: string; color: string; bg: string; canvasBg: string; canvasColor: string }[] => [
@@ -397,6 +420,8 @@ const parseGifFile = async (file: File, maxDimension: number = 800): Promise<Gif
 
 export default function App() {
   const [language, setLanguage] = useState<Language>('zh');
+  const languageRef = useRef<Language>('zh');
+  useEffect(() => { languageRef.current = language; }, [language]);
   const [showModal, setShowModal] = useState(false);
 
   // ------------------------------------------------------------------------
@@ -681,7 +706,7 @@ export default function App() {
   const [ffmpegLoaded, setFfmpegLoaded] = useState(false);
   const [ffmpegError, setFfmpegError] = useState('');
 
-  // 初始化 FFmpeg
+  // 初始化 FFmpeg — runs once only; [language] caused re-init + listener stacking on lang switch
   useEffect(() => {
     const loadFFmpeg = async () => {
       try {
@@ -691,7 +716,7 @@ export default function App() {
             setExportProgress(50 + Math.round(progress * 50));
           }
         });
-        
+
         await ffmpeg.load({
           coreURL,
           wasmURL,
@@ -699,28 +724,29 @@ export default function App() {
         setFfmpegLoaded(true);
       } catch (err) {
         console.error('FFmpeg load error:', err);
-        setFfmpegError(i18n[language].ffmpegNotLoaded);
+        setFfmpegError(i18n[languageRef.current].ffmpegNotLoaded);
       }
     };
     loadFFmpeg();
-  }, [language]);
+  }, []);
 
   const handleExportError = (err: any) => {
     console.error("Export failed:", err);
     if (isExportingRef.current) {
       const errMsg = err?.message || err?.name || String(err);
+      const tErr = i18n[languageRef.current];
       let userFriendlyMsg = "";
 
       if (errMsg.includes('mimeType is not supported')) {
-        userFriendlyMsg = "当前浏览器不支持直接导出此格式，请尝试更换导出格式，或使用 Chrome / Edge 浏览器重试。";
+        userFriendlyMsg = tErr.exportErrMimeType;
       } else if (errMsg.includes('FS error') || errMsg.includes('No such file')) {
-        userFriendlyMsg = "文件处理异常，可能是因为处理速度过快或缓存出错。请刷新页面后重试。";
+        userFriendlyMsg = tErr.exportErrFs;
       } else if (errMsg.includes('memory') || errMsg.includes('out of bounds')) {
-        userFriendlyMsg = "设备内存不足。视频渲染需要耗费大量内存，强烈建议关闭其他多余网页，或改用电脑端浏览器进行导出。";
+        userFriendlyMsg = tErr.exportErrMemory;
       } else if (errMsg.includes('SharedArrayBuffer')) {
-        userFriendlyMsg = "您的浏览器环境不支持高性能多线程渲染。请更换为最新的 PC 端 Chrome 或 Edge 浏览器。";
+        userFriendlyMsg = tErr.exportErrSab;
       } else {
-        userFriendlyMsg = `导出失败，发生异常。请尝试刷新页面、更换导出格式，或使用全屏录制作为备用方案。错误详情：${errMsg}`;
+        userFriendlyMsg = tErr.exportErrGeneric.replace('{error}', errMsg);
       }
 
       setFfmpegError(userFriendlyMsg);
@@ -1080,7 +1106,8 @@ export default function App() {
           if (!isExportingRef.current) throw new Error("Export cancelled");
           
           const timeMs = (i / fps) * 1000;
-          const visualTime = timeMs - (audioOffsetRef.current * 1000);
+          let visualTime = timeMs - (audioOffsetRef.current * 1000);
+          if (visualTime < 0) visualTime = 0;
           let mouth: MouthShape = 'default';
           let lyric = '';
           
@@ -1110,12 +1137,11 @@ export default function App() {
           }
 
           const blob = await new Promise<Blob | null>(resolve => targetCanvas.toBlob(resolve, mimeType, 0.8));
-          if (blob) {
-            const buffer = await blob.arrayBuffer();
-            const frameIndex = isTransparent ? i : i - segStart;
-            const frameName = `frame_${frameIndex.toString().padStart(5, '0')}.${frameExt}`;
-            await ffmpeg.writeFile(frameName, new Uint8Array(buffer));
-          }
+          if (!blob) throw new Error(`Frame ${i} capture failed (toBlob returned null — device may be low on memory)`);
+          const buffer = await blob.arrayBuffer();
+          const frameIndex = isTransparent ? i : i - segStart;
+          const frameName = `frame_${frameIndex.toString().padStart(5, '0')}.${frameExt}`;
+          await ffmpeg.writeFile(frameName, new Uint8Array(buffer));
 
           if (i % 100 === 0) {
             // Memory Watchdog: Yield to main thread every 100 frames to prevent crash and allow GC
@@ -1316,7 +1342,10 @@ export default function App() {
       reqRef.current = requestAnimationFrame(updateFrame);
 
       const progressInterval = setInterval(() => {
-        const current = audioRef.current ? audioRef.current.currentTime * 1000 : currentTime;
+        // currentTime state is stale inside this closure; derive elapsed time from refs instead
+        const current = audioRef.current
+          ? audioRef.current.currentTime * 1000
+          : performance.now() - startTimeMsRef.current;
         const progress = Math.min(100, Math.round((current / durationToRecord) * 100));
         setExportProgress(progress);
         setExportStatus(`[Recording WebM] ${progress}%`);
@@ -1455,14 +1484,20 @@ export default function App() {
   const handleBpmChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newTempo = parseFloat(e.target.value);
     if (isNaN(newTempo) || newTempo <= 0 || !parsedData) return;
-    
-    const updatedNotes = recalculateTimings(parsedData.notes, newTempo);
+
+    // Scale timings proportionally instead of sequential reassignment.
+    // recalculateTimings() strips inter-note gaps, which breaks USTX/VSQX files
+    // where rest notes were filtered out and gaps are encoded in startTimeMs.
+    const ratio = parsedData.tempo / newTempo;
+    const updatedNotes = parsedData.notes.map(note => ({
+      ...note,
+      startTimeMs: note.startTimeMs * ratio,
+      durationMs: note.durationMs * ratio,
+    }));
     const newData = { ...parsedData, tempo: newTempo, notes: updatedNotes };
-    
+
     setParsedData(newData);
     parsedDataRef.current = newData;
-    
-    // Force redraw for canvas if needed, mostly handled by reactive states
   };
 
   const parseUstx = (content: string) => {
@@ -1493,7 +1528,7 @@ export default function App() {
         };
       });
 
-      if (options.length > 1 || (parsed.tracks && parsed.tracks.length > 1)) {
+      if (options.length > 1) {
         setTrackOptions(options);
         setShowTrackSelector(true);
       } else {
@@ -1536,7 +1571,9 @@ export default function App() {
           durationMs
         };
       })
-      .filter((n: NoteData) => n.originalLyric !== 'R' && n.originalLyric !== 'r')
+      // R notes intentionally kept: filtering them creates timing gaps that cause
+      // the closed-mouth image to flash for 1-2 frames at every rest boundary.
+      // R notes simply resolve to getMouthShape('R') === 'default', same as the gap would.
       .sort((a: NoteData, b: NoteData) => a.startTimeMs - b.startTimeMs);
 
     const newData = { tempo: bpm, notes };
@@ -2506,7 +2543,7 @@ export default function App() {
                   return url;
                 });
               }}
-              accept="audio/*"
+              accept="audio/*,.mp3,.wav,.ogg,.flac,.aac,.m4a,.mp4,.webm,.mov"
               className={(isDragging) => `
                 relative group cursor-pointer flex flex-col items-center justify-center 
                 w-full portrait:h-24 landscape:h-48 portrait:rounded-2xl landscape:rounded-3xl border-2 border-dashed transition-transform duration-300 ease-out
@@ -2518,7 +2555,7 @@ export default function App() {
               {(isDragging) => (
                 <>
                   <label className="absolute inset-0 w-full h-full cursor-pointer">
-                    <input type="file" accept="audio/*" onChange={handleAudioUpload} className="hidden" />
+                    <input type="file" accept="audio/*,.mp3,.wav,.ogg,.flac,.aac,.m4a,.mp4,.webm,.mov" onChange={handleAudioUpload} className="hidden" />
                   </label>
                   <div className="flex portrait:flex-row landscape:flex-col items-center portrait:space-x-4 landscape:space-y-4 pointer-events-none">
                     <div className={`p-2 landscape:p-4 rounded-full ${isDragging ? 'bg-emerald-500/20 text-emerald-600 dark:bg-emerald-500/30 dark:text-emerald-400' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 group-hover:text-zinc-700 dark:group-hover:text-zinc-300'}`}>
