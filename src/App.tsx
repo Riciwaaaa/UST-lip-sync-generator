@@ -1305,7 +1305,7 @@ export default function App() {
         setExportStatus('Generating palette...');
         await ffmpeg.exec(['-framerate', fps.toString(), '-i', `frame_%05d.${frameExt}`, '-vf', 'palettegen=reserve_transparent=1', 'palette.png']);
         setExportStatus(t.convertingVideo || 'Converting...');
-        ffmpegArgs.push('-i', 'palette.png', '-filter_complex', '[0:v][1:v]paletteuse=alpha_threshold=128[out]', '-map', '[out]', '-loop', '0', outputName);
+        ffmpegArgs.push('-i', 'palette.png', '-filter_complex', '[0:v][1:v]paletteuse=alpha_threshold=128[out]', '-map', '[out]', '-loop', '0', '-disposal', '2', '-gifflags', '-offsetting', outputName);
         await ffmpeg.exec(ffmpegArgs);
         await ffmpeg.deleteFile('palette.png').catch(() => {});
       } else {
