@@ -2863,25 +2863,26 @@ export default function App() {
                     <span>{formatTime(currentTime)}</span>
                     <span>{parsedData.notes.length > 0 ? formatTime(parsedData.notes[parsedData.notes.length - 1].startTimeMs + parsedData.notes[parsedData.notes.length - 1].durationMs) : '00:00.000'}</span>
                   </div>
-                  <input 
-                    type="range" 
-                    min="0" 
-                    max={parsedData.notes.length > 0 ? parsedData.notes[parsedData.notes.length - 1].startTimeMs + parsedData.notes[parsedData.notes.length - 1].durationMs : 0} 
-                    step="1"
-                    value={currentTime}
-                    onChange={handleSeek}
-                    className="w-full h-2 bg-zinc-100 dark:bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500 dark:accent-indigo-400"
-                  />
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={togglePlay}
+                      className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-900 dark:text-zinc-100 transition-all active:scale-95 shadow-sm"
+                    >
+                      {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
+                    </button>
+                    <input
+                      type="range"
+                      min="0"
+                      max={parsedData.notes.length > 0 ? parsedData.notes[parsedData.notes.length - 1].startTimeMs + parsedData.notes[parsedData.notes.length - 1].durationMs : 0}
+                      step="1"
+                      value={currentTime}
+                      onChange={handleSeek}
+                      className="flex-1 h-2 bg-zinc-100 dark:bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500 dark:accent-indigo-400"
+                    />
+                  </div>
                 </div>
 
-                <div className="flex portrait:flex-col landscape:flex-row items-center justify-between w-full portrait:gap-4 landscape:gap-0">
-                  <button 
-                    onClick={togglePlay}
-                    className="flex items-center justify-center portrait:w-full landscape:w-14 portrait:h-12 landscape:h-14 portrait:rounded-xl landscape:rounded-full bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-900 dark:text-zinc-100 portrait:shadow-sm landscape:shadow-lg transition-all active:scale-95"
-                  >
-                    {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-1" />}
-                  </button>
-                  
+                <div className="flex items-center justify-end w-full">
                   <div className="flex portrait:flex-wrap landscape:flex-nowrap items-center justify-center portrait:gap-2 landscape:space-x-2 w-full portrait:w-auto">
                     <button
                       onClick={handleFullscreenPreview}
