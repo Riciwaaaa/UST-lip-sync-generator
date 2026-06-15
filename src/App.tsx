@@ -1035,6 +1035,13 @@ export default function App() {
         pip.document.body.appendChild(video);
         video.play();
         pipVideoRef.current = video;
+        // Space key toggles app playback while the Document PiP window is focused
+        pip.document.addEventListener('keydown', (e: KeyboardEvent) => {
+          if (e.code === 'Space') {
+            e.preventDefault();
+            togglePlay();
+          }
+        });
         pip.addEventListener('pagehide', () => {
           setIsPoppedOut(false);
           pipVideoRef.current = null;
@@ -1044,6 +1051,7 @@ export default function App() {
       }
 
       // Fallback: standard Video PiP (all modern browsers)
+      // Sync the mini-player's native play/pause with the app's playback state.
       const stream = canvas.captureStream(30);
       const video = document.createElement('video');
       video.srcObject = stream;
@@ -1051,7 +1059,18 @@ export default function App() {
       pipVideoRef.current = video;
       document.body.appendChild(video); // must be in DOM for PiP
       await video.play();
+      // Skip the initial play event triggered by video.play() above
+      let pipInitialized = false;
+      video.addEventListener('play', () => {
+        if (!pipInitialized) return;
+        if (!isPlayingRef.current) togglePlay();
+      });
+      video.addEventListener('pause', () => {
+        if (!pipInitialized) return;
+        if (isPlayingRef.current) togglePlay();
+      });
       await video.requestPictureInPicture();
+      pipInitialized = true;
       video.addEventListener('leavepictureinpicture', () => {
         setIsPoppedOut(false);
         video.remove();
