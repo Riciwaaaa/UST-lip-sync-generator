@@ -1298,15 +1298,23 @@ export default function App() {
       if (exportFormat === 'mp4' || exportFormat === 'mov' || exportFormat === 'mkv') {
         ffmpegArgs.push('-c:v', 'copy');
         if (hasAudio) ffmpegArgs.push('-c:a', 'aac', '-b:a', '192k');
+        ffmpegArgs.push(outputName);
+        await ffmpeg.exec(ffmpegArgs);
       } else if (exportFormat === 'gif') {
-        ffmpegArgs.push('-vf', 'split[s0][s1];[s0]palettegen=reserve_transparent=1[p];[s1][p]paletteuse', '-loop', '0');
+        // Two-pass palette GIF: single-pass split+palettegen is unreliable in FFmpeg.wasm
+        setExportStatus('Generating palette...');
+        await ffmpeg.exec(['-framerate', fps.toString(), '-i', `frame_%05d.${frameExt}`, '-vf', 'palettegen=reserve_transparent=1', 'palette.png']);
+        setExportStatus(t.convertingVideo || 'Converting...');
+        ffmpegArgs.push('-i', 'palette.png', '-filter_complex', '[0:v][1:v]paletteuse=alpha_threshold=128[out]', '-map', '[out]', '-loop', '0', outputName);
+        await ffmpeg.exec(ffmpegArgs);
+        await ffmpeg.deleteFile('palette.png').catch(() => {});
+      } else {
+        ffmpegArgs.push(outputName);
+        await ffmpeg.exec(ffmpegArgs);
       }
 
-      ffmpegArgs.push(outputName);
-
-      await ffmpeg.exec(ffmpegArgs);
-
       const data = await ffmpeg.readFile(outputName);
+      if ((data as Uint8Array).length === 0) throw new Error('Output file is empty — FFmpeg export failed');
       const videoBlob = new Blob([data], { type: exportFormat === 'gif' ? 'image/gif' : `video/${exportFormat}` });
       const url = URL.createObjectURL(videoBlob);
       
