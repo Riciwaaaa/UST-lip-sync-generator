@@ -1078,7 +1078,7 @@ export default function App() {
 
       if (totalDuration === 0) throw new Error("No notes to export");
 
-      const fps = exportFormat === 'gif' ? 15 : 30;
+      const fps = exportFormat === 'gif' ? 20 : 30; // 20fps = 5cs/frame exactly; 15fps = 6.67cs/frame → rounding drift
       totalFrames = Math.ceil((totalDuration / 1000) * fps);
       
       const targetCanvas = document.createElement('canvas');
@@ -1413,7 +1413,7 @@ export default function App() {
           if (hasAudio) args.push('-c:a', 'aac', '-b:a', '192k');
           args.push(outputName);
         } else if (exportFormat === 'gif') {
-          args.push('-vf', 'fps=15,scale=512:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse');
+          args.push('-vf', 'fps=20,scale=512:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse');
           args.push(outputName);
         }
 
