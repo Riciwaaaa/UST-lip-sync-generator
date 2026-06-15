@@ -102,6 +102,8 @@ const i18n = {
     exportVideo: "导出视频",
     fullscreenMode: "🖥️ 全屏录制模式 (Fullscreen)",
     fullscreenHint: "点击屏幕或按空格键开始播放",
+    popOut: "⧉ 弹出预览",
+    popOutUnsupported: "浏览器不支持弹出窗口",
     envWarning: "检测到您正在使用移动端或内置浏览器。由于视频渲染需要耗费大量内存，极易导致崩溃，强烈建议您复制网址到 PC 端浏览器中进行导出操作！",
     longVideoWarning: "检测到视频长度超过5分钟。长视频导出可能会消耗极长的时间和极高的内存，存在崩溃风险。是否继续？",
     webmWarning: "提示：WebM 透明格式将采用【实时录制】方案以防止内存溢出。导出期间请勿切换标签页或最小化浏览器。",
@@ -185,6 +187,8 @@ const i18n = {
     exportVideo: "Export Video",
     fullscreenMode: "🖥️ Fullscreen Preview",
     fullscreenHint: "Click or press Space to play",
+    popOut: "⧉ Pop Out",
+    popOutUnsupported: "Browser does not support pop-out",
     envWarning: "Mobile or in-app browser detected. Video rendering consumes a lot of memory and may crash. It is highly recommended to copy the URL to a PC browser for exporting!",
     longVideoWarning: "Video length exceeds 5 minutes. Exporting long videos may take a very long time and consume high memory, risking a crash. Continue?",
     webmWarning: "Note: WebM format uses real-time recording to prevent memory issues. Please do not switch tabs or minimize the browser during export.",
@@ -268,6 +272,8 @@ const i18n = {
     exportVideo: "動画を出力",
     fullscreenMode: "🖥️ フルスクリーン録画 (Fullscreen)",
     fullscreenHint: "画面をクリックするか、スペースキーを押して再生",
+    popOut: "⧉ ポップアウト",
+    popOutUnsupported: "ブラウザはポップアウトをサポートしていません",
     envWarning: "モバイル端末またはアプリ内ブラウザが検出されました。動画のレンダリングには大量のメモリを消費し、クラッシュする可能性が高いため、PCブラウザにURLをコピーしてエクスポートすることを強くお勧めします！",
     longVideoWarning: "動画の長さが5分を超えています。長時間の動画出力は非常に時間がかかり、メモリを大量に消費するため、クラッシュする危険性があります。続行しますか？",
     webmWarning: "注：WebM形式はメモリ不足を防ぐためリアルタイム録画を使用します。エクスポート中はタブを切り替えたり、ブラウザを最小化したりしないでください。",
@@ -490,6 +496,8 @@ export default function App() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showFullscreenHint, setShowFullscreenHint] = useState(false);
   const hintTimeoutRef = useRef<number | null>(null);
+  const [isPoppedOut, setIsPoppedOut] = useState(false);
+  const pipVideoRef = useRef<HTMLVideoElement | null>(null);
 
   const [canvasSize, setCanvasSize] = useState({ width: 512, height: 512 });
   const isFirstImageRef = useRef(true);
@@ -998,6 +1006,61 @@ export default function App() {
     } catch (err) {
       console.error("Error attempting to enable full-screen mode:", err);
       alert("无法进入全屏模式 / Cannot enter fullscreen mode");
+    }
+  };
+
+  const handlePopOut = async () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    if (!('requestPictureInPicture' in HTMLVideoElement.prototype) && !('documentPictureInPicture' in window)) {
+      alert(i18n[languageRef.current].popOutUnsupported);
+      return;
+    }
+
+    try {
+      // Document PiP (Chrome 116+): allows full HTML/CSS control over the pop-out window
+      if ('documentPictureInPicture' in window) {
+        const pip = await (window as any).documentPictureInPicture.requestWindow({
+          width: canvasSize.width,
+          height: canvasSize.height,
+          disallowReturnToOpener: false,
+        });
+        pip.document.body.style.cssText = 'margin:0;padding:0;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden;';
+        const video = pip.document.createElement('video') as HTMLVideoElement;
+        video.srcObject = canvas.captureStream(30);
+        video.style.cssText = 'width:100%;height:100%;object-fit:contain;';
+        video.autoplay = true;
+        video.muted = true;
+        pip.document.body.appendChild(video);
+        video.play();
+        pipVideoRef.current = video;
+        pip.addEventListener('pagehide', () => {
+          setIsPoppedOut(false);
+          pipVideoRef.current = null;
+        });
+        setIsPoppedOut(true);
+        return;
+      }
+
+      // Fallback: standard Video PiP (all modern browsers)
+      const stream = canvas.captureStream(30);
+      const video = document.createElement('video');
+      video.srcObject = stream;
+      video.muted = true;
+      pipVideoRef.current = video;
+      document.body.appendChild(video); // must be in DOM for PiP
+      await video.play();
+      await video.requestPictureInPicture();
+      video.addEventListener('leavepictureinpicture', () => {
+        setIsPoppedOut(false);
+        video.remove();
+        pipVideoRef.current = null;
+      });
+      setIsPoppedOut(true);
+    } catch (err) {
+      console.error('Pop-out error:', err);
+      setIsPoppedOut(false);
     }
   };
 
@@ -2894,6 +2957,18 @@ export default function App() {
                       title={t.fullscreenMode}
                     >
                       <span className="portrait:text-xl landscape:text-2xl leading-none -mt-1">⛶</span>
+                    </button>
+
+                    <button
+                      onClick={handlePopOut}
+                      disabled={isExporting || isPoppedOut}
+                      className={`flex items-center justify-center portrait:w-12 landscape:w-14 portrait:h-12 landscape:h-14 rounded-xl font-medium portrait:shadow-sm landscape:shadow-lg transition-all active:scale-95 border
+                        ${isExporting || isPoppedOut
+                          ? 'bg-zinc-100/50 dark:bg-zinc-800/50 text-zinc-400 dark:text-zinc-500 border-zinc-200 dark:border-zinc-800 cursor-not-allowed'
+                          : 'bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 border-zinc-300 dark:border-zinc-700'}`}
+                      title={t.popOut}
+                    >
+                      <span className="portrait:text-xl landscape:text-2xl leading-none">⧉</span>
                     </button>
 
                     <select 
