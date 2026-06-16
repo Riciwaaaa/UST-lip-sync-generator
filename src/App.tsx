@@ -1226,15 +1226,21 @@ export default function App() {
           }
 
           if (gifEnc) {
-            // Encode this frame straight into the GIF stream with 1-bit transparency + dispose=2
+            // Encode straight into the GIF stream. Colours are quantized at rgb565 precision
+            // (rgba4444 only has 4 bits/channel → heavy banding). Transparency is applied as a
+            // separate 1-bit mask so the alpha channel never degrades the colour palette.
             const { data: rgba } = targetCtx.getImageData(0, 0, targetCanvas.width, targetCanvas.height);
-            const palette = quantize(rgba, 256, { format: 'rgba4444', oneBitAlpha: true });
-            const index = applyPalette(rgba, palette, 'rgba4444');
-            const transparentIndex = palette.findIndex((c: number[]) => c.length === 4 && c[3] === 0);
+            const palette = quantize(rgba, 255, { format: 'rgb565' }); // reserve 1 slot for transparency
+            const index = applyPalette(rgba, palette, 'rgb565');
+            const transparentIndex = palette.length;
+            palette.push([0, 0, 0]); // dedicated transparent slot
+            for (let p = 0; p < index.length; p++) {
+              if (rgba[p * 4 + 3] < 128) index[p] = transparentIndex;
+            }
             gifEnc.writeFrame(index, targetCanvas.width, targetCanvas.height, {
               palette,
-              transparent: transparentIndex >= 0,
-              transparentIndex: transparentIndex >= 0 ? transparentIndex : 0,
+              transparent: true,
+              transparentIndex,
               delay: gifDelay,
               dispose: 2, // restore to background → transparent areas clear instead of ghosting
             });
