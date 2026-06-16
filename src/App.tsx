@@ -1187,63 +1187,89 @@ export default function App() {
       const gifEnc = isTransparent ? GIFEncoder() : null;
       const gifDelay = Math.round(1000 / fps); // ms; gifenc converts to centiseconds internally
 
+      // Render frame i to targetCanvas and return its RGBA pixels. Shared by the colour-sampling
+      // pre-pass and the main encode loop so the rendering logic stays in one place.
+      const renderFrameToTarget = (i: number): Uint8ClampedArray => {
+        const timeMs = (i / fps) * 1000;
+        let visualTime = timeMs - (audioOffsetRef.current * 1000);
+        if (visualTime < 0) visualTime = 0;
+        let mouth: MouthShape = 'default';
+        let lyric = '';
+
+        for (let k = parsedDataRef.current!.notes.length - 1; k >= 0; k--) {
+          const n = parsedDataRef.current!.notes[k];
+          if (visualTime >= n.startTimeMs && visualTime < n.startTimeMs + n.durationMs) {
+            let searchIdx = k;
+            while (searchIdx >= 0 && (parsedDataRef.current!.notes[searchIdx].lyric === '+' || parsedDataRef.current!.notes[searchIdx].lyric === '-')) {
+              searchIdx--;
+            }
+            const activeNote = searchIdx >= 0 ? parsedDataRef.current!.notes[searchIdx] : n;
+            mouth = getMouthShape(activeNote.lyric);
+            lyric = activeNote.lyric;
+            break;
+          }
+        }
+
+        drawCanvas(mouth, visualTime, lyric, isTransparent); // Skip background if transparent
+
+        targetCtx.clearRect(0, 0, targetCanvas.width, targetCanvas.height);
+        if (!isTransparent) {
+          targetCtx.fillStyle = 'white';
+          targetCtx.fillRect(0, 0, targetCanvas.width, targetCanvas.height);
+        }
+        if (canvasRef.current) {
+          targetCtx.drawImage(canvasRef.current, 0, 0, targetCanvas.width, targetCanvas.height);
+        }
+        return targetCtx.getImageData(0, 0, targetCanvas.width, targetCanvas.height).data;
+      };
+
+      // GIF colour pre-pass: build ONE global palette from frames sampled across the timeline.
+      // Quantizing is the slow part — doing it once (instead of per frame) is the main speed win,
+      // and a shared palette removes inter-frame colour flicker. applyPalette uses the 255-colour
+      // palette only; a dedicated transparent slot is appended afterwards so no opaque pixel can
+      // accidentally map to it.
+      let gifColorPalette: number[][] | null = null; // 255 colours, for applyPalette
+      let gifFullPalette: number[][] | null = null;   // 256 incl. transparent slot, written once as global table
+      let gifTransparentIndex = 0;
+      let gifFirstFrame = true;
+      if (gifEnc) {
+        setExportStatus(t.renderingFrames || 'Analyzing colours...');
+        const sampleCount = Math.min(totalFrames, 12);
+        const frameBytes = targetCanvas.width * targetCanvas.height * 4;
+        const merged = new Uint8ClampedArray(sampleCount * frameBytes);
+        for (let s = 0; s < sampleCount; s++) {
+          const fi = Math.floor((s / sampleCount) * totalFrames);
+          merged.set(renderFrameToTarget(fi), s * frameBytes);
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
+        gifColorPalette = quantize(merged, 255, { format: 'rgb565' });
+        gifTransparentIndex = gifColorPalette.length;
+        gifFullPalette = [...gifColorPalette, [0, 0, 0]]; // dedicated transparent slot
+      }
+
       for (let segStart = 0; segStart < totalFrames; segStart += SEGMENT_SIZE) {
         const segEnd = Math.min(segStart + SEGMENT_SIZE, totalFrames);
         const segFrames = segEnd - segStart;
-        
+
         for (let i = segStart; i < segEnd; i++) {
           if (!isExportingRef.current) throw new Error("Export cancelled");
-          
-          const timeMs = (i / fps) * 1000;
-          let visualTime = timeMs - (audioOffsetRef.current * 1000);
-          if (visualTime < 0) visualTime = 0;
-          let mouth: MouthShape = 'default';
-          let lyric = '';
-          
-          for (let k = parsedDataRef.current.notes.length - 1; k >= 0; k--) {
-            const n = parsedDataRef.current.notes[k];
-            if (visualTime >= n.startTimeMs && visualTime < n.startTimeMs + n.durationMs) {
-              let searchIdx = k;
-              while (searchIdx >= 0 && (parsedDataRef.current.notes[searchIdx].lyric === '+' || parsedDataRef.current.notes[searchIdx].lyric === '-')) {
-                searchIdx--;
-              }
-              const activeNote = searchIdx >= 0 ? parsedDataRef.current.notes[searchIdx] : n;
-              mouth = getMouthShape(activeNote.lyric);
-              lyric = activeNote.lyric;
-              break;
-            }
-          }
 
-          drawCanvas(mouth, visualTime, lyric, isTransparent); // Skip background if transparent
-          
-          targetCtx.clearRect(0, 0, targetCanvas.width, targetCanvas.height);
-          if (!isTransparent) {
-            targetCtx.fillStyle = 'white';
-            targetCtx.fillRect(0, 0, targetCanvas.width, targetCanvas.height);
-          }
-          if (canvasRef.current) {
-            targetCtx.drawImage(canvasRef.current, 0, 0, targetCanvas.width, targetCanvas.height);
-          }
+          const rgba = renderFrameToTarget(i);
 
           if (gifEnc) {
-            // Encode straight into the GIF stream. Colours are quantized at rgb565 precision
-            // (rgba4444 only has 4 bits/channel → heavy banding). Transparency is applied as a
-            // separate 1-bit mask so the alpha channel never degrades the colour palette.
-            const { data: rgba } = targetCtx.getImageData(0, 0, targetCanvas.width, targetCanvas.height);
-            const palette = quantize(rgba, 255, { format: 'rgb565' }); // reserve 1 slot for transparency
-            const index = applyPalette(rgba, palette, 'rgb565');
-            const transparentIndex = palette.length;
-            palette.push([0, 0, 0]); // dedicated transparent slot
+            // Map this frame onto the shared global palette (cheap), then apply 1-bit transparency.
+            const index = applyPalette(rgba, gifColorPalette!, 'rgb565');
             for (let p = 0; p < index.length; p++) {
-              if (rgba[p * 4 + 3] < 128) index[p] = transparentIndex;
+              if (rgba[p * 4 + 3] < 128) index[p] = gifTransparentIndex;
             }
             gifEnc.writeFrame(index, targetCanvas.width, targetCanvas.height, {
-              palette,
+              palette: gifFirstFrame ? gifFullPalette! : undefined, // global table written once
               transparent: true,
-              transparentIndex,
+              transparentIndex: gifTransparentIndex,
               delay: gifDelay,
               dispose: 2, // restore to background → transparent areas clear instead of ghosting
             });
+            gifFirstFrame = false;
           } else {
             const blob = await new Promise<Blob | null>(resolve => targetCanvas.toBlob(resolve, mimeType, 0.8));
             if (!blob) throw new Error(`Frame ${i} capture failed (toBlob returned null — device may be low on memory)`);
