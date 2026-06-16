@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(npm run *)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(grep -iA4 \"dispose\" node_modules/gifenc/README.md)",
+      "Bash(grep -iA20 \"### .quantize\" node_modules/gifenc/README.md)"
     ]
   }
 }

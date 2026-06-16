@@ -5,6 +5,7 @@ import { fetchFile } from '@ffmpeg/util';
 import coreURL from '@ffmpeg/core?url';
 import wasmURL from '@ffmpeg/core/wasm?url';
 import { parseGIF, decompressFrames } from 'gifuct-js';
+import { GIFEncoder, quantize, applyPalette } from 'gifenc';
 import yaml from 'js-yaml';
 import Encoding from 'encoding-japanese';
 import { DragDropWrapper } from './components/DragDropWrapper';
@@ -1180,6 +1181,12 @@ export default function App() {
       const SEGMENT_SIZE = isTransparent ? totalFrames : 600; // Do not segment GIF to preserve transparency easily
       const segmentFiles: string[] = [];
 
+      // GIF is encoded directly in JS (gifenc) with explicit per-frame disposal so that
+      // transparent frames clear cleanly instead of ghosting. ffmpeg.wasm's gif muxer
+      // cannot reliably do transparent-background animation.
+      const gifEnc = isTransparent ? GIFEncoder() : null;
+      const gifDelay = Math.round(1000 / fps); // ms; gifenc converts to centiseconds internally
+
       for (let segStart = 0; segStart < totalFrames; segStart += SEGMENT_SIZE) {
         const segEnd = Math.min(segStart + SEGMENT_SIZE, totalFrames);
         const segFrames = segEnd - segStart;
@@ -1218,12 +1225,27 @@ export default function App() {
             targetCtx.drawImage(canvasRef.current, 0, 0, targetCanvas.width, targetCanvas.height);
           }
 
-          const blob = await new Promise<Blob | null>(resolve => targetCanvas.toBlob(resolve, mimeType, 0.8));
-          if (!blob) throw new Error(`Frame ${i} capture failed (toBlob returned null — device may be low on memory)`);
-          const buffer = await blob.arrayBuffer();
-          const frameIndex = isTransparent ? i : i - segStart;
-          const frameName = `frame_${frameIndex.toString().padStart(5, '0')}.${frameExt}`;
-          await ffmpeg.writeFile(frameName, new Uint8Array(buffer));
+          if (gifEnc) {
+            // Encode this frame straight into the GIF stream with 1-bit transparency + dispose=2
+            const { data: rgba } = targetCtx.getImageData(0, 0, targetCanvas.width, targetCanvas.height);
+            const palette = quantize(rgba, 256, { format: 'rgba4444', oneBitAlpha: true });
+            const index = applyPalette(rgba, palette, 'rgba4444');
+            const transparentIndex = palette.findIndex((c: number[]) => c.length === 4 && c[3] === 0);
+            gifEnc.writeFrame(index, targetCanvas.width, targetCanvas.height, {
+              palette,
+              transparent: transparentIndex >= 0,
+              transparentIndex: transparentIndex >= 0 ? transparentIndex : 0,
+              delay: gifDelay,
+              dispose: 2, // restore to background → transparent areas clear instead of ghosting
+            });
+          } else {
+            const blob = await new Promise<Blob | null>(resolve => targetCanvas.toBlob(resolve, mimeType, 0.8));
+            if (!blob) throw new Error(`Frame ${i} capture failed (toBlob returned null — device may be low on memory)`);
+            const buffer = await blob.arrayBuffer();
+            const frameIndex = i - segStart;
+            const frameName = `frame_${frameIndex.toString().padStart(5, '0')}.${frameExt}`;
+            await ffmpeg.writeFile(frameName, new Uint8Array(buffer));
+          }
 
           if (i % 100 === 0) {
             // Memory Watchdog: Yield to main thread every 100 frames to prevent crash and allow GC
@@ -1258,8 +1280,24 @@ export default function App() {
         }
       }
 
+      // GIF: finalize the JS-encoded stream and download directly (no ffmpeg involved)
+      if (gifEnc) {
+        setExportStatus(t.convertingVideo || 'Converting...');
+        gifEnc.finish();
+        const bytes = gifEnc.bytes();
+        if (!bytes || bytes.length === 0) throw new Error('GIF encoding produced no data');
+        const gifBlob = new Blob([bytes], { type: 'image/gif' });
+        const gifUrl = URL.createObjectURL(gifBlob);
+        const gifLink = document.createElement('a');
+        gifLink.href = gifUrl;
+        gifLink.download = `lipsync_${Date.now()}.gif`;
+        gifLink.click();
+        URL.revokeObjectURL(gifUrl);
+        return;
+      }
+
       setExportStatus(t.convertingVideo || 'Converting...');
-      
+
       // Concatenate segments
       let finalVideo = 'concatenated.mp4';
       if (!isTransparent) {
@@ -1287,35 +1325,18 @@ export default function App() {
         ffmpegArgs.push('-i', `input_audio.${audioExt}`);
       }
       
-      if (!isTransparent) {
-        ffmpegArgs.push('-i', finalVideo);
-      } else {
-        ffmpegArgs.push('-framerate', fps.toString(), '-i', `frame_%05d.${frameExt}`);
-      }
+      ffmpegArgs.push('-i', finalVideo);
 
       const outputName = `output.${exportFormat}`;
 
-      if (exportFormat === 'mp4' || exportFormat === 'mov' || exportFormat === 'mkv') {
-        ffmpegArgs.push('-c:v', 'copy');
-        if (hasAudio) ffmpegArgs.push('-c:a', 'aac', '-b:a', '192k');
-        ffmpegArgs.push(outputName);
-        await ffmpeg.exec(ffmpegArgs);
-      } else if (exportFormat === 'gif') {
-        // Two-pass palette GIF: single-pass split+palettegen is unreliable in FFmpeg.wasm
-        setExportStatus('Generating palette...');
-        await ffmpeg.exec(['-framerate', fps.toString(), '-i', `frame_%05d.${frameExt}`, '-vf', 'palettegen=reserve_transparent=1', 'palette.png']);
-        setExportStatus(t.convertingVideo || 'Converting...');
-        ffmpegArgs.push('-i', 'palette.png', '-filter_complex', '[0:v][1:v]paletteuse=alpha_threshold=128[out]', '-map', '[out]', '-loop', '0', '-disposal', '2', '-gifflags', '-offsetting', outputName);
-        await ffmpeg.exec(ffmpegArgs);
-        await ffmpeg.deleteFile('palette.png').catch(() => {});
-      } else {
-        ffmpegArgs.push(outputName);
-        await ffmpeg.exec(ffmpegArgs);
-      }
+      ffmpegArgs.push('-c:v', 'copy');
+      if (hasAudio) ffmpegArgs.push('-c:a', 'aac', '-b:a', '192k');
+      ffmpegArgs.push(outputName);
+      await ffmpeg.exec(ffmpegArgs);
 
       const data = await ffmpeg.readFile(outputName);
       if ((data as Uint8Array).length === 0) throw new Error('Output file is empty — FFmpeg export failed');
-      const videoBlob = new Blob([data], { type: exportFormat === 'gif' ? 'image/gif' : `video/${exportFormat}` });
+      const videoBlob = new Blob([data], { type: `video/${exportFormat}` });
       const url = URL.createObjectURL(videoBlob);
       
       const a = document.createElement('a');
