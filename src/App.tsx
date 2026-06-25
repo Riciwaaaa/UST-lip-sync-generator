@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, DragEvent, ChangeEvent } from 'react';
-import { UploadCloud, FileText, AlertCircle, Clock, Music, Play, Pause, Image as ImageIcon, Video, Download, Settings, Layers, X, Globe, Sun, Moon, Github } from 'lucide-react';
+import { UploadCloud, FileText, AlertCircle, Clock, Music, Play, Pause, Image as ImageIcon, Video, Download, Settings, Layers, X, Globe, Sun, Moon, Github, Search } from 'lucide-react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 import coreURL from '@ffmpeg/core?url';
@@ -7,8 +7,9 @@ import wasmURL from '@ffmpeg/core/wasm?url';
 import { parseGIF, decompressFrames } from 'gifuct-js';
 import { GIFEncoder, quantize, applyPalette } from 'gifenc';
 import yaml from 'js-yaml';
-import Encoding from 'encoding-japanese';
 import { DragDropWrapper } from './components/DragDropWrapper';
+import { UstSearchModal } from './components/UstSearchModal';
+import { decodeProjectBytes } from './lib/decodeProject';
 
 interface NoteData {
   index: number;
@@ -157,6 +158,8 @@ const i18n = {
     exportErrMemory: "设备内存不足。视频渲染需要耗费大量内存，强烈建议关闭其他多余网页，或改用电脑端浏览器进行导出。",
     exportErrSab: "您的浏览器环境不支持高性能多线程渲染。请更换为最新的 PC 端 Chrome 或 Edge 浏览器。",
     exportErrGeneric: "导出失败，发生异常。请尝试刷新页面、更换导出格式，或使用全屏录制作为备用方案。错误详情：{error}",
+    noUstSearch: "没有UST工程文件？在线搜索",
+    searchingOnline: "在线搜索UST",
   },
   en: {
     title: "UST Lip Sync Generator",
@@ -242,6 +245,8 @@ const i18n = {
     exportErrMemory: "Device is low on memory. Close other tabs or switch to a PC browser for exporting.",
     exportErrSab: "Your browser does not support high-performance multi-threaded rendering. Please use the latest Chrome or Edge on PC.",
     exportErrGeneric: "Export failed. Try refreshing the page, switching export format, or using Fullscreen mode as a fallback. Error: {error}",
+    noUstSearch: "No UST file? Search Online",
+    searchingOnline: "Search UST Online",
   },
   ja: {
     title: "USTリップシンクジェネレーター",
@@ -327,6 +332,8 @@ const i18n = {
     exportErrMemory: "デバイスのメモリが不足しています。不要なタブを閉じるか、PCブラウザを使用してエクスポートしてください。",
     exportErrSab: "お使いのブラウザ環境は高性能なマルチスレッドレンダリングに対応していません。最新のPC版Chrome / Edgeをお使いください。",
     exportErrGeneric: "エクスポートに失敗しました。ページを更新して再試行するか、エクスポート形式を変更するか、全画面録画をお試しください。エラー: {error}",
+    noUstSearch: "USTファイルをお持ちでない方？オンライン検索",
+    searchingOnline: "USTをオンライン検索",
   }
 };
 
@@ -537,6 +544,35 @@ export default function App() {
   const [audioOffset, setAudioOffset] = useState<number>(0);
   const audioOffsetRef = useRef<number>(0);
   const trackedUrlsRef = useRef<Set<string>>(new Set());
+
+  // ------------------------------------------------------------------------
+  // 新增：在线搜索 UST 弹窗状态
+  // ------------------------------------------------------------------------
+  const [showUstSearch, setShowUstSearch] = useState(false);
+
+  const handleUstContentLoaded = (bytes: Uint8Array, fileName: string) => {
+    setError('');
+    setFileName(fileName);
+
+    const lowerName = fileName.toLowerCase();
+    const isUstx = lowerName.endsWith('.ustx');
+    const isVsqx = lowerName.endsWith('.vsqx');
+
+    try {
+      const content = decodeProjectBytes(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), fileName);
+      if (isUstx) {
+        parseUstx(content);
+      } else if (isVsqx) {
+        parseVsqx(content);
+      } else {
+        parseUst(content);
+      }
+    } catch (err) {
+      console.error('Parse UST error:', err);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      setError(`${t.parseError} \n${errMsg}`);
+    }
+  };
 
   // ------------------------------------------------------------------------
   // 新增：响应式与面板拖拽状态 (Resizable Divider)
@@ -2020,34 +2056,8 @@ export default function App() {
       const buffer = await file.arrayBuffer();
       if (buffer && buffer.byteLength > 0) {
         try {
-          let result = '';
-          if (isUstx || isVsqx) {
-            result = new TextDecoder('utf-8').decode(buffer);
-          } else {
-            try {
-              const uint8Array = new Uint8Array(buffer);
-              const detected = Encoding.detect(uint8Array);
-              const detectedStr = detected ? detected.toString().toUpperCase() : 'SJIS';
-              
-              if (detectedStr.includes('UTF8') || detectedStr.includes('UNICODE')) {
-                result = new TextDecoder('utf-8').decode(buffer);
-              } else if (detectedStr === 'UTF16' || detectedStr === 'UTF16LE') {
-                result = new TextDecoder('utf-16le').decode(buffer);
-              } else if (detectedStr === 'UTF16BE') {
-                result = new TextDecoder('utf-16be').decode(buffer);
-              } else {
-                result = Encoding.convert(uint8Array, {
-                  to: 'UNICODE',
-                  from: detected || 'SJIS',
-                  type: 'string'
-                }) as unknown as string;
-              }
-            } catch (encodingErr) {
-              console.error("encoding-japanese failed, falling back to utf-8 decoder:", encodingErr);
-              result = new TextDecoder('utf-8').decode(buffer);
-            }
-          }
-          
+          const result = decodeProjectBytes(buffer, file.name);
+
           if (isUstx) {
             parseUstx(result);
           } else if (isVsqx) {
@@ -2676,6 +2686,28 @@ export default function App() {
               )}
             </DragDropWrapper>
 
+            {/* Online Search Button */}
+            <div className="flex items-center justify-center">
+              <button
+                onClick={() => setShowUstSearch(true)}
+                className="relative group flex flex-col items-center justify-center 
+                  w-full portrait:h-24 landscape:h-48 portrait:rounded-2xl landscape:rounded-3xl border-2 border-dashed transition-transform duration-300 ease-out
+                  border-indigo-300/50 dark:border-indigo-600/30 bg-indigo-50/30 dark:bg-indigo-950/20 hover:border-indigo-400 dark:hover:border-indigo-500 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/40"
+              >
+                <div className="flex portrait:flex-row landscape:flex-col items-center portrait:space-x-4 landscape:space-y-4 pointer-events-none">
+                  <div className="p-2 landscape:p-4 rounded-full bg-indigo-100/50 dark:bg-indigo-900/30 text-indigo-500 dark:text-indigo-400 group-hover:bg-indigo-200/50 dark:group-hover:bg-indigo-800/40 group-hover:text-indigo-600 dark:group-hover:text-indigo-300">
+                    <Search className="w-6 h-6 landscape:w-8 landscape:h-8" />
+                  </div>
+                  <div className="portrait:text-left landscape:text-center portrait:space-y-0 landscape:space-y-1">
+                    <p className="portrait:text-sm landscape:text-lg font-medium text-indigo-600 dark:text-indigo-400 landscape:px-4">
+                      {t.noUstSearch}
+                    </p>
+                    <p className="portrait:text-xs landscape:text-sm text-indigo-400/70 dark:text-indigo-500/70">{t.searchingOnline}</p>
+                  </div>
+                </div>
+              </button>
+            </div>
+
             {/* Audio Upload */}
             <DragDropWrapper
               onDropFile={(file) => {
@@ -3109,6 +3141,14 @@ export default function App() {
         </div>
       </div>
     </div>
+
+      {/* UST Search Modal */}
+      <UstSearchModal
+        isOpen={showUstSearch}
+        onClose={() => setShowUstSearch(false)}
+        onUstLoaded={handleUstContentLoaded}
+        language={language}
+      />
     </div>
   );
 }
