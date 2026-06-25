@@ -12,9 +12,9 @@ const BROWSER_UA =
 const PROJECT_EXT = /\.(ustx?|vsqx)$/i;
 
 const bowlrollDispatcher = new Agent({
-  connectTimeout: 30000,
-  headersTimeout: 60000,
-  bodyTimeout: 120000,
+  connectTimeout: 8000,
+  headersTimeout: 15000,
+  bodyTimeout: 20000,
 });
 
 function isNetworkError(error: unknown): boolean {

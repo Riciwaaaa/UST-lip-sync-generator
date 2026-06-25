@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "api/search-ust.ts": {
+      "maxDuration": 30
+    }
+  },
   "rewrites": [
     {
       "source": "/((?!api/).*)",
