@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
   downloadBowlRollProject,
   searchBowlRoll,
-} from './bowlroll-server';
+} from './bowlroll-server.js';
 import type { BowlRollSearchResult } from '../../shared/bowlroll';
 
 function toBase64(data: Uint8Array): string {

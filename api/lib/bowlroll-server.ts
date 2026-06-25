@@ -4,7 +4,7 @@ import {
   extractBowlRollFileId,
   parseBowlRollSearchJson,
   type BowlRollSearchResult,
-} from '../../shared/bowlroll';
+} from '../../shared/bowlroll.js';
 
 const BOWLROLL_BASE = 'https://bowlroll.net';
 const BROWSER_UA =
