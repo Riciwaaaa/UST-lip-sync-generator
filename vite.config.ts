@@ -8,6 +8,11 @@ export default defineConfig(({mode}) => {
   const apiPort = env.DEV_API_PORT || '3001';
   return {
     plugins: [react(), tailwindcss()],
+    optimizeDeps: {
+      // @ffmpeg/ffmpeg 内部通过 new Worker(new URL(...)) 加载 worker，
+      // 被 Vite 预打包后 worker.js 会 404，导致开发环境 FFmpeg 永远加载失败
+      exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'],
+    },
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
     },

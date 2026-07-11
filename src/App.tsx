@@ -360,6 +360,9 @@ export interface GifFrame {
   delay: number;
 }
 
+// 某些来源（拖拽、网盘）的文件 MIME 可能为空或 application/octet-stream，需按扩展名兜底
+const isGifFile = (file: File) => file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
+
 const parseGifFile = async (file: File, maxDimension: number = 800): Promise<GifFrame[]> => {
   const buffer = await file.arrayBuffer();
   const gif = parseGIF(buffer);
@@ -541,7 +544,8 @@ export default function App() {
   // 新增：自定义宽高和音频偏移
   const [customWidth, setCustomWidth] = useState<string>('');
   const [customHeight, setCustomHeight] = useState<string>('');
-  const [audioOffset, setAudioOffset] = useState<number>(0);
+  // 保存原始字符串，避免受控 number 输入框把用户输入的 "-" 立即重写为 0
+  const [audioOffset, setAudioOffset] = useState<string>('0');
   const audioOffsetRef = useRef<number>(0);
   const trackedUrlsRef = useRef<Set<string>>(new Set());
 
@@ -662,7 +666,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    audioOffsetRef.current = audioOffset;
+    const parsed = parseFloat(audioOffset);
+    audioOffsetRef.current = isNaN(parsed) ? 0 : parsed;
   }, [audioOffset]);
 
   useEffect(() => {
@@ -914,13 +919,37 @@ export default function App() {
     }
   };
 
-  // 静态时更新画布
+  // 静态时更新画布；若背景/嘴型含 GIF，则用空闲时钟持续重绘，保证暂停时 GIF 也能播放
   useEffect(() => {
-    if (!isPlaying) {
-      const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTimeMs && currentTime < n.startTimeMs + n.durationMs);
-      drawCanvas(currentMouth, currentTime, currentNote ? currentNote.lyric : '');
-    }
-  }, [canvasSize, currentMouth, isPlaying, currentTime, mouthImages, overrideImages]);
+    if (isPlaying) return;
+
+    const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTimeMs && currentTime < n.startTimeMs + n.durationMs);
+    const lyric = currentNote ? currentNote.lyric : '';
+    drawCanvas(currentMouth, currentTime, lyric);
+
+    // 按 drawCanvas 的图层优先级判断当前画面是否包含 GIF
+    const mouthIsGif =
+      (lyric && overrideGifFramesRef.current[lyric]) ? true :
+      (lyric && overrideImageElementsRef.current[lyric]) ? false :
+      mouthGifFramesRef.current[currentMouth] ? true :
+      mouthImageElementsRef.current[currentMouth] ? false :
+      !!mouthGifFramesRef.current['default'];
+    const hasAnimatedLayer = !!(bgGifFramesRef.current && bgGifFramesRef.current.length > 0) || mouthIsGif;
+    if (!hasAnimatedLayer) return;
+
+    let rafId: number;
+    const idleStart = performance.now();
+    const tick = () => {
+      if (isPlayingRef.current) return;
+      // 离线导出与预览共用主画布，导出期间暂停空闲重绘但保持循环存活
+      if (!isExportingRef.current) {
+        drawCanvas(currentMouth, currentTime + (performance.now() - idleStart), lyric);
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [canvasSize, currentMouth, isPlaying, currentTime, mouthImages, overrideImages, parsedData, bgImageUrl, bgGifFrames, backgroundColor]);
 
   const updateFrame = () => {
     const data = parsedDataRef.current;
@@ -1177,6 +1206,11 @@ export default function App() {
 
   const renderOffline = async () => {
     if (!parsedDataRef.current) return;
+    // GIF 走纯 JS 编码（gifenc），不依赖 ffmpeg；其余格式必须等 ffmpeg 就绪
+    if (exportFormat !== 'gif' && !ffmpegLoaded) {
+      setFfmpegError(i18n[languageRef.current].ffmpegNotLoadedAlert);
+      return;
+    }
     if (isPlaying) togglePlay();
     setIsExporting(true);
     isExportingRef.current = true;
@@ -1187,6 +1221,9 @@ export default function App() {
     const isTransparent = exportFormat === 'gif';
     const mimeType = isTransparent ? 'image/png' : 'image/jpeg';
     const frameExt = isTransparent ? 'png' : 'jpg';
+    // 声明在 try 外，供 finally 统一清理 MEMFS 残留（失败残留会占用内存）
+    const segmentFiles: string[] = [];
+    let audioExt = 'mp3';
 
     try {
       const ffmpeg = ffmpegRef.current;
@@ -1215,7 +1252,6 @@ export default function App() {
 
       const startTimeMs = performance.now();
       const SEGMENT_SIZE = isTransparent ? totalFrames : 600; // Do not segment GIF to preserve transparency easily
-      const segmentFiles: string[] = [];
 
       // GIF is encoded directly in JS (gifenc) with explicit per-frame disposal so that
       // transparent frames clear cleanly instead of ghosting. ffmpeg.wasm's gif muxer
@@ -1338,7 +1374,8 @@ export default function App() {
         if (!isTransparent) {
           const segmentName = `segment_${segStart}.mp4`;
           setExportStatus(`[Offline] Encoding segment ${segmentFiles.length + 1}...`);
-          await ffmpeg.exec(['-framerate', fps.toString(), '-i', `frame_%05d.${frameExt}`, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', segmentName]);
+          // -y：覆盖上次导出失败/取消后残留的同名文件，否则 wasm 环境下 ffmpeg 等待确认直接报错
+          await ffmpeg.exec(['-y', '-framerate', fps.toString(), '-i', `frame_%05d.${frameExt}`, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', segmentName]);
           segmentFiles.push(segmentName);
 
           // Cleanup frames for this segment
@@ -1350,7 +1387,7 @@ export default function App() {
 
       // GIF: finalize the JS-encoded stream and download directly (no ffmpeg involved)
       if (gifEnc) {
-        setExportStatus(t.convertingVideo || 'Converting...');
+        setExportStatus(t.encodingVideo || 'Converting...');
         gifEnc.finish();
         const bytes = gifEnc.bytes();
         if (!bytes || bytes.length === 0) throw new Error('GIF encoding produced no data');
@@ -1364,7 +1401,7 @@ export default function App() {
         return;
       }
 
-      setExportStatus(t.convertingVideo || 'Converting...');
+      setExportStatus(t.encodingVideo || 'Converting...');
 
       // Concatenate segments
       let finalVideo = 'concatenated.mp4';
@@ -1374,12 +1411,11 @@ export default function App() {
         } else {
           const concatText = segmentFiles.map(f => `file '${f}'`).join('\n');
           await ffmpeg.writeFile('concat.txt', concatText);
-          await ffmpeg.exec(['-f', 'concat', '-safe', '0', '-i', 'concat.txt', '-c', 'copy', 'concatenated.mp4']);
+          await ffmpeg.exec(['-y', '-f', 'concat', '-safe', '0', '-i', 'concat.txt', '-c', 'copy', 'concatenated.mp4']);
         }
       }
 
       let hasAudio = false;
-      let audioExt = 'mp3';
       if (audioFileRef.current && exportFormat !== 'gif') {
         hasAudio = true;
         const audioBuffer = await audioFileRef.current.arrayBuffer();
@@ -1387,18 +1423,19 @@ export default function App() {
         await ffmpeg.writeFile(`input_audio.${audioExt}`, new Uint8Array(audioBuffer));
       }
 
-      const ffmpegArgs = [];
-      
+      const ffmpegArgs = ['-y'];
+
       if (hasAudio) {
         ffmpegArgs.push('-i', `input_audio.${audioExt}`);
       }
-      
+
       ffmpegArgs.push('-i', finalVideo);
 
       const outputName = `output.${exportFormat}`;
 
       ffmpegArgs.push('-c:v', 'copy');
-      if (hasAudio) ffmpegArgs.push('-c:a', 'aac', '-b:a', '192k');
+      // -shortest：音频比视频长时按视频长度截断，避免末帧长时间冻结
+      if (hasAudio) ffmpegArgs.push('-c:a', 'aac', '-b:a', '192k', '-shortest');
       ffmpegArgs.push(outputName);
       await ffmpeg.exec(ffmpegArgs);
 
@@ -1413,24 +1450,22 @@ export default function App() {
       a.click();
       URL.revokeObjectURL(url);
 
-      // Cleanup
-      for (const seg of segmentFiles) {
-        await ffmpeg.deleteFile(seg).catch(() => {});
-      }
-      await ffmpeg.deleteFile('concat.txt').catch(() => {});
-      await ffmpeg.deleteFile('concatenated.mp4').catch(() => {});
-      await ffmpeg.deleteFile(outputName).catch(() => {});
-      if (hasAudio) await ffmpeg.deleteFile(`input_audio.${audioExt}`).catch(() => {});
-
     } catch (err: any) {
       handleExportError(err);
     } finally {
-      // 彻底清理所有帧文件
+      // 无论成功失败都彻底清理 MEMFS，失败残留会占用内存并影响后续导出
       try {
         const ffmpeg = ffmpegRef.current;
         for (let i = 0; i < totalFrames; i++) {
           ffmpeg.deleteFile(`frame_${i.toString().padStart(5, '0')}.${frameExt}`).catch(() => {});
         }
+        for (const seg of segmentFiles) {
+          ffmpeg.deleteFile(seg).catch(() => {});
+        }
+        ffmpeg.deleteFile('concat.txt').catch(() => {});
+        ffmpeg.deleteFile('concatenated.mp4').catch(() => {});
+        ffmpeg.deleteFile(`output.${exportFormat}`).catch(() => {});
+        ffmpeg.deleteFile(`input_audio.${audioExt}`).catch(() => {});
       } catch (e) {}
 
       setIsExporting(false);
@@ -1563,7 +1598,8 @@ export default function App() {
         const videoBuffer = await videoBlob.arrayBuffer();
         await ffmpeg.writeFile('temp_video.webm', new Uint8Array(videoBuffer));
 
-        const args = [];
+        // -y：覆盖上次导出失败后残留的同名输出文件
+        const args = ['-y'];
         let hasAudio = false;
         let ext = 'mp3';
 
@@ -1582,14 +1618,14 @@ export default function App() {
         const outputName = `output.${exportFormat}`;
 
         if (exportFormat === 'webm') {
-          args.push('-c:v', 'copy', '-c:a', 'libopus', outputName);
+          args.push('-c:v', 'copy', '-c:a', 'libopus', '-shortest', outputName);
         } else if (exportFormat === 'mp4' || exportFormat === 'mov') {
           args.push('-c:v', 'libx264', '-preset', 'fast', '-crf', '23', '-pix_fmt', 'yuv420p');
-          if (hasAudio) args.push('-c:a', 'aac', '-b:a', '192k');
+          if (hasAudio) args.push('-c:a', 'aac', '-b:a', '192k', '-shortest');
           args.push(outputName);
         } else if (exportFormat === 'mkv') {
           args.push('-c:v', 'libx264', '-preset', 'fast', '-crf', '23');
-          if (hasAudio) args.push('-c:a', 'aac', '-b:a', '192k');
+          if (hasAudio) args.push('-c:a', 'aac', '-b:a', '192k', '-shortest');
           args.push(outputName);
         } else if (exportFormat === 'gif') {
           args.push('-vf', 'fps=20,scale=512:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse');
@@ -1613,15 +1649,19 @@ export default function App() {
         a.click();
         URL.revokeObjectURL(url);
 
-        try { await ffmpeg.deleteFile('temp_video.webm'); } catch(e){}
-        if (hasAudio) {
-          try { await ffmpeg.deleteFile(`input_audio.${ext}`); } catch(e){}
-        }
-        try { await ffmpeg.deleteFile(outputName); } catch(e){}
       }
     } catch (err: any) {
       handleExportError(err);
     } finally {
+      // 无论成功失败都清理 MEMFS 残留，避免占用内存
+      try {
+        const ffmpeg = ffmpegRef.current;
+        ffmpeg.deleteFile('temp_video.webm').catch(() => {});
+        ffmpeg.deleteFile(`output.${exportFormat}`).catch(() => {});
+        const audioName = audioFileRef.current?.name;
+        if (audioName) ffmpeg.deleteFile(`input_audio.${audioName.split('.').pop() || 'mp3'}`).catch(() => {});
+      } catch (e) {}
+
       setIsExporting(false);
       isExportingRef.current = false;
       setExportStatus('');
@@ -2195,7 +2235,7 @@ export default function App() {
   const handleMouthImageUpload = async (shape: MouthShape, file: File) => {
     if (!file) return;
 
-    if (file.type === 'image/gif') {
+    if (isGifFile(file)) {
       try {
         const gifFrames = await parseGifFile(file);
         mouthGifFramesRef.current[shape] = gifFrames;
@@ -2231,7 +2271,7 @@ export default function App() {
   const handleOverrideImageUpload = async (lyric: string, file: File) => {
     if (!file) return;
 
-    if (file.type === 'image/gif') {
+    if (isGifFile(file)) {
       try {
         const gifFrames = await parseGifFile(file);
         overrideGifFramesRef.current[lyric] = gifFrames;
@@ -2283,7 +2323,7 @@ export default function App() {
     setBackgroundColor(null);
     backgroundColorRef.current = null;
 
-    if (file.type === 'image/gif') {
+    if (isGifFile(file)) {
       try {
         const gifCanvasData = await parseGifFile(file, 1280);
         
@@ -2762,7 +2802,7 @@ export default function App() {
               onDropFile={async (file) => {
                 setBackgroundColor(null);
                 backgroundColorRef.current = null;
-                if (file.type === 'image/gif') {
+                if (isGifFile(file)) {
                   try {
                     const gifCanvasData = await parseGifFile(file, 1280);
                     bgGifFramesRef.current = gifCanvasData;
@@ -2776,7 +2816,7 @@ export default function App() {
                     drawCanvas(currentMouth, currentTime, currentNote ? currentNote.lyric : '');
                   } catch (err) {
                     console.error('Failed to parse background GIF:', err);
-                    setError(t.errorGif);
+                    setError(t.gifParseFailed);
                   }
                 } else {
                   const url = createTrackedURL(file);
@@ -3026,7 +3066,7 @@ export default function App() {
                       type="number" 
                       step="0.01"
                       value={audioOffset}
-                      onChange={(e) => setAudioOffset(Number(e.target.value))}
+                      onChange={(e) => setAudioOffset(e.target.value)}
                       className="w-24 bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg px-2 py-1 text-sm text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:focus:ring-indigo-400"
                     />
                   </div>
@@ -3096,11 +3136,12 @@ export default function App() {
                       <option value="gif">{t.gifDesc}</option>
                     </select>
 
-                    <button 
+                    <button
                       onClick={handleExport}
-                      disabled={isExporting}
+                      disabled={isExporting || (!ffmpegLoaded && ['mp4', 'mov', 'mkv'].includes(exportFormat))}
+                      title={!ffmpegLoaded && ['mp4', 'mov', 'mkv'].includes(exportFormat) ? t.ffmpegNotLoadedAlert : undefined}
                       className={`flex portrait:flex-1 landscape:flex-none items-center justify-center portrait:px-4 landscape:px-6 portrait:h-12 landscape:h-14 rounded-xl font-medium portrait:shadow-sm landscape:shadow-lg transition-all active:scale-95 portrait:space-x-1 landscape:space-x-2 portrait:text-sm landscape:text-base
-                        ${isExporting
+                        ${isExporting || (!ffmpegLoaded && ['mp4', 'mov', 'mkv'].includes(exportFormat))
                           ? 'bg-indigo-600/50 text-white/50 cursor-not-allowed' 
                           : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/20'}`}
                     >
