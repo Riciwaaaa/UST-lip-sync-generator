@@ -1,3 +1,4 @@
+import Encoding from 'encoding-japanese';
 import { unzipSync } from 'fflate';
 import { Agent, fetch as undiciFetch, type RequestInit as UndiciRequestInit } from 'undici';
 import {
@@ -10,6 +11,21 @@ const BOWLROLL_BASE = 'https://bowlroll.net';
 const BROWSER_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const PROJECT_EXT = /\.(ustx?|vsqx)$/i;
+// Vercel 响应体上限约 4.5MB，候选文件内容合计超过此值时不内联，改由客户端带 entry 参数二次请求
+const MAX_INLINE_CANDIDATES_BYTES = 3 * 1024 * 1024;
+const README_MAX_CHARS = 10000;
+
+export interface ProjectCandidate {
+  entryName: string;
+  fileName: string;
+  size: number;
+  data?: Uint8Array;
+}
+
+export interface ArchiveReadme {
+  fileName: string;
+  content: string;
+}
 
 const bowlrollDispatcher = new Agent({
   connectTimeout: 8000,
@@ -90,12 +106,15 @@ export async function searchBowlRoll(query: string, page = 1): Promise<BowlRollS
   return parseBowlRollSearchJson(data);
 }
 
-export async function downloadBowlRollProject(fileUrl: string): Promise<{
+export async function downloadBowlRollProject(fileUrl: string, entryName?: string): Promise<{
   data: Uint8Array;
   fileName: string;
   authorId?: string;
   authorName?: string;
   authorLink?: string;
+  description?: string;
+  readme?: ArchiveReadme;
+  candidates?: ProjectCandidate[];
 }> {
   const fileId = extractBowlRollFileId(fileUrl);
   if (!fileId) {
@@ -197,12 +216,16 @@ export async function downloadBowlRollProject(fileUrl: string): Promise<{
     archiveFiles = [archiveName];
   }
 
-  const project = extractProjectFile(archiveData, archiveFiles);
+  const project = extractProjectFile(archiveData, archiveFiles, entryName);
   return {
     ...project,
     authorId: pageAuthor.authorId,
     authorName: pageAuthor.authorName,
-    authorLink: pageAuthor.authorId ? `${BOWLROLL_BASE}/user/${pageAuthor.authorId}` : undefined,
+    authorLink:
+      pageAuthor.authorId && pageAuthor.authorId !== '0'
+        ? `${BOWLROLL_BASE}/user/${pageAuthor.authorId}`
+        : undefined,
+    description: parseDescriptionFromFilePage(pageHtml),
   };
 }
 
@@ -213,6 +236,17 @@ function getCookieHeader(response: BowlrollResponse): string {
 }
 
 function parseAuthorFromFilePage(html: string): { authorId?: string; authorName?: string } {
+  // #initialize 元素直接带 data-user_id / data-user_name，比扫作者主页链接可靠
+  const init = html.match(/id="initialize"([^>]*)>/);
+  if (init) {
+    const read = (name: string) => init[1].match(new RegExp(`data-${name}="([^"]*)"`))?.[1] ?? '';
+    const authorId = read('user_id');
+    const authorName = unescapeHtmlEntities(read('user_name')).trim();
+    if (authorId) {
+      return { authorId, authorName: authorName || undefined };
+    }
+  }
+
   const userBlock = html.match(/href="\/user\/(\d+)"[^>]*>([\s\S]*?)<\/a>/i);
   if (!userBlock) {
     const idOnly = html.match(/href="\/user\/(\d+)"/i);
@@ -224,6 +258,27 @@ function parseAuthorFromFilePage(html: string): { authorId?: string; authorName?
     authorId: userBlock[1],
     authorName: authorName || undefined,
   };
+}
+
+// 文件简介只在服务端渲染的 meta description 里（正文由 JS 渲染，无公开详情 API）
+function parseDescriptionFromFilePage(html: string): string | undefined {
+  const match =
+    html.match(/<meta\s+name="description"\s+content="([^"]*)"/i) ||
+    html.match(/<meta\s+property="og:description"\s+content="([^"]*)"/i);
+  if (!match) return undefined;
+  const text = unescapeHtmlEntities(match[1]).trim();
+  return text || undefined;
+}
+
+function unescapeHtmlEntities(text: string): string {
+  return text
+    .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n: string) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
 }
 
 function parseFilePageInit(html: string): { csrf_token: string; download_key: boolean; download_control: string } | null {
@@ -260,21 +315,19 @@ function parseIntoFilesResponse(data: unknown): string[] {
 }
 
 
-function extractProjectFile(
+export function extractProjectFile(
   data: Uint8Array,
   knownFiles: string[] = [],
-): { data: Uint8Array; fileName: string } {
-  const knownProject = knownFiles.find((name) => PROJECT_EXT.test(name));
-  if (knownProject && looksLikeUstText(data)) {
-    return { data, fileName: knownProject };
+  entryName?: string,
+): { data: Uint8Array; fileName: string; readme?: ArchiveReadme; candidates?: ProjectCandidate[] } {
+  // zip 魔数必须先判：无压缩（stored）的 zip 头部能直接看到 UST 文本，会被 looksLikeUstText 误判
+  if (data[0] === 0x50 && data[1] === 0x4b) {
+    return extractFromZip(data, knownFiles, entryName);
   }
 
+  const knownProject = knownFiles.find((name) => PROJECT_EXT.test(name));
   if (looksLikeUstText(data)) {
     return { data, fileName: knownProject || guessProjectFileName(data) || 'download.ust' };
-  }
-
-  if (data[0] === 0x50 && data[1] === 0x4b) {
-    return extractFromZip(data, knownFiles);
   }
 
   if (isRarArchive(data) || is7zArchive(data)) {
@@ -305,29 +358,109 @@ function is7zArchive(data: Uint8Array): boolean {
   return data[0] === 0x37 && data[1] === 0x7a && data[2] === 0xbc && data[3] === 0xaf;
 }
 
-function extractFromZip(data: Uint8Array, knownFiles: string[]): { data: Uint8Array; fileName: string } {
+function extractFromZip(
+  data: Uint8Array,
+  knownFiles: string[],
+  entryName?: string,
+): { data: Uint8Array; fileName: string; readme?: ArchiveReadme; candidates?: ProjectCandidate[] } {
   const entries = unzipSync(data);
-  const names = Object.keys(entries);
+  const names = Object.keys(entries).filter((name) => !name.endsWith('/'));
 
-  const preferredName =
-    knownFiles.find((name) => PROJECT_EXT.test(name)) ||
-    names.find((name) => PROJECT_EXT.test(name.split('/').pop() || name));
-
-  if (!preferredName) {
+  const projectNames = names.filter((name) => PROJECT_EXT.test(name.split('/').pop() || name));
+  if (projectNames.length === 0) {
     throw new Error('NO_PROJECT_FILE');
   }
 
-  const entryName =
-    names.find((name) => name === preferredName) ||
-    names.find((name) => (name.split('/').pop() || name) === preferredName.split('/').pop()) ||
-    names.find((name) => PROJECT_EXT.test(name));
-
-  if (!entryName) {
-    throw new Error('NO_PROJECT_FILE');
+  // 二次请求：客户端在多候选弹窗里选定了具体条目
+  if (entryName) {
+    const target = projectNames.find((name) => name === entryName);
+    if (!target) {
+      throw new Error('NO_PROJECT_FILE');
+    }
+    return { data: entries[target], fileName: entryDisplayName(target) };
   }
 
-  return {
-    data: entries[entryName],
-    fileName: (entryName.split('/').pop() || entryName).replace(/[\\/:*?"<>|]/g, '_'),
+  const knownProject = knownFiles.find((name) => PROJECT_EXT.test(name));
+  const primary =
+    (knownProject &&
+      (projectNames.find((name) => name === knownProject) ||
+        projectNames.find((name) => (name.split('/').pop() || name) === knownProject.split('/').pop()))) ||
+    projectNames[0];
+
+  const result: { data: Uint8Array; fileName: string; readme?: ArchiveReadme; candidates?: ProjectCandidate[] } = {
+    data: entries[primary],
+    fileName: entryDisplayName(primary),
+    readme: extractReadme(entries, names, projectNames),
   };
+
+  if (projectNames.length > 1) {
+    const totalSize = projectNames.reduce((sum, name) => sum + entries[name].length, 0);
+    const inline = totalSize <= MAX_INLINE_CANDIDATES_BYTES;
+    result.candidates = projectNames.map((name) => ({
+      entryName: name,
+      fileName: entryDisplayName(name),
+      size: entries[name].length,
+      data: inline ? entries[name] : undefined,
+    }));
+  }
+
+  return result;
+}
+
+function entryDisplayName(entryName: string): string {
+  const base = entryName.split('/').pop() || entryName;
+  return decodeZipEntryName(base).replace(/[\\/:*?"<>|]/g, '_');
+}
+
+// fflate 对无 UTF-8 标志的 zip 条目名按 Latin-1 解码（字节保真），日文 zip 常为 Shift-JIS，
+// 需还原字节后重新检测解码；含 >0xFF 字符说明本来就是正确解码的 UTF-8 名，原样返回
+function decodeZipEntryName(name: string): string {
+  if (!name || /^[\x20-\x7e]*$/.test(name)) return name;
+  const bytes = new Uint8Array(name.length);
+  for (let i = 0; i < name.length; i++) {
+    const code = name.charCodeAt(i);
+    if (code > 0xff) return name;
+    bytes[i] = code;
+  }
+  const decoded = decodeJapaneseText(bytes).trim();
+  return decoded || name;
+}
+
+function decodeJapaneseText(bytes: Uint8Array): string {
+  try {
+    const detected = Encoding.detect(bytes);
+    const detectedStr = detected ? detected.toString().toUpperCase() : '';
+    if (!detected || detectedStr.includes('UTF8') || detectedStr === 'ASCII' || detectedStr.includes('UNICODE')) {
+      return new TextDecoder('utf-8', { fatal: false }).decode(bytes).replace(/^\uFEFF/, '');
+    }
+    return (
+      Encoding.convert(bytes, { to: 'UNICODE', from: detected, type: 'string' }) as unknown as string
+    ).replace(/^\uFEFF/, '');
+  } catch {
+    return new TextDecoder('utf-8', { fatal: false }).decode(bytes).replace(/^\uFEFF/, '');
+  }
+}
+
+function extractReadme(
+  entries: Record<string, Uint8Array>,
+  names: string[],
+  projectNames: string[],
+): ArchiveReadme | undefined {
+  const candidates = names.filter((name) => !projectNames.includes(name));
+  const baseOf = (name: string) => decodeZipEntryName(name.split('/').pop() || name);
+
+  let target = candidates.find((name) => {
+    const base = baseOf(name);
+    return /readme|お読み|よみください|読んで|はじめに/i.test(base) && /\.(txt|md)$/i.test(base);
+  });
+  if (!target) {
+    // 没有明确的 README 时，压缩包里唯一的 txt 也视作说明文件
+    const txts = candidates.filter((name) => /\.txt$/i.test(baseOf(name)));
+    if (txts.length === 1) target = txts[0];
+  }
+  if (!target) return undefined;
+
+  const content = decodeJapaneseText(entries[target]).slice(0, README_MAX_CHARS).trim();
+  if (!content) return undefined;
+  return { fileName: baseOf(target), content };
 }

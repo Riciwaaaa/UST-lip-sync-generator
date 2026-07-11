@@ -13,7 +13,10 @@ export interface BowlRollSearchResult {
 
 const BOWLROLL_BASE = 'https://bowlroll.net';
 
-const PROJECT_TITLE_RE = /\bustx?\b|vsqx?|歌詞|うた/i;
+// 标题含 ust/vsq（不区分大小写，覆盖 ustx/vsqx）视为工程文件类结果，前端据此分组展示
+export function isProjectLikeTitle(title: string): boolean {
+  return /ust|vsq/i.test(title);
+}
 
 export function extractBowlRollFileId(urlOrId: string): string | null {
   const match = urlOrId.match(/bowlroll\.net\/file\/(\d+)/i) || urlOrId.match(/^(\d+)$/);
@@ -70,7 +73,7 @@ export function parseBowlRollSearchHtml(html: string, maxResults = 20): BowlRoll
   return sortSearchResults(results).slice(0, maxResults);
 }
 
-export function parseBowlRollSearchJson(data: unknown, maxResults = 20): BowlRollSearchResult[] {
+export function parseBowlRollSearchJson(data: unknown, maxResults = 40): BowlRollSearchResult[] {
   if (!data || typeof data !== 'object') return [];
   const record = data as {
     files?: Array<{
@@ -101,15 +104,15 @@ export function parseBowlRollSearchJson(data: unknown, maxResults = 20): BowlRol
       fileId,
       authorName,
       authorId,
-      authorLink: authorId ? `${BOWLROLL_BASE}/user/${authorId}` : undefined,
+      // user_id 为 0 表示匿名投稿，没有作者主页
+      authorLink: authorId && authorId !== '0' ? `${BOWLROLL_BASE}/user/${authorId}` : undefined,
       uploadedAt: (file.upload_at || '').trim() || undefined,
       downloadCount: typeof file.download_count === 'number' ? file.download_count : undefined,
     });
   }
 
-  const projectLike = results.filter((item) => PROJECT_TITLE_RE.test(item.title));
-  const ranked = sortSearchResults(projectLike.length > 0 ? projectLike : results);
-  return ranked.slice(0, maxResults);
+  // 不再丢弃标题不含关键词的结果——全部返回，由前端分组折叠展示
+  return sortSearchResults(results).slice(0, maxResults);
 }
 
 export function getAuthorAccountId(result: BowlRollSearchResult): string | null {

@@ -41,6 +41,8 @@ export async function handleSearchUst(req: VercelRequest, res: VercelResponse): 
   const query = (req.query.q as string | undefined)?.trim();
   const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
   const url = req.query.url as string | undefined;
+  // 多候选弹窗选定后二次请求时指定 zip 内条目
+  const entry = (req.query.entry as string | undefined) || undefined;
 
   if (action === 'search' && query) {
     try {
@@ -62,7 +64,8 @@ export async function handleSearchUst(req: VercelRequest, res: VercelResponse): 
         return;
       }
 
-      const { data, fileName, authorId, authorName, authorLink } = await downloadBowlRollProject(url);
+      const { data, fileName, authorId, authorName, authorLink, description, readme, candidates } =
+        await downloadBowlRollProject(url, entry);
       res.status(200).json({
         content: toBase64(data),
         fileName,
@@ -70,6 +73,14 @@ export async function handleSearchUst(req: VercelRequest, res: VercelResponse): 
         authorId,
         authorName,
         authorLink,
+        description,
+        readme,
+        candidates: candidates?.map((candidate) => ({
+          entryName: candidate.entryName,
+          fileName: candidate.fileName,
+          size: candidate.size,
+          content: candidate.data ? toBase64(candidate.data) : undefined,
+        })),
       });
     } catch (error) {
       console.error('Fetch error:', error);

@@ -1,10 +1,33 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Search, X, Download, ExternalLink, Loader2, AlertCircle, Copy, Check, User } from 'lucide-react';
-import { getAuthorAccountId, sortSearchResults, type BowlRollSearchResult } from '../../shared/bowlroll';
+import { Search, X, Download, ExternalLink, Loader2, AlertCircle, Copy, Check, User, FileText, ChevronDown, ChevronUp } from 'lucide-react';
+import { getAuthorAccountId, isProjectLikeTitle, sortSearchResults, type BowlRollSearchResult } from '../../shared/bowlroll';
 
 type SearchResult = BowlRollSearchResult;
 
 const CREDIT_CONFIRM_DELAY_SEC = 5;
+
+interface ArchiveReadme {
+  fileName: string;
+  content: string;
+}
+
+interface ProjectFileCandidate {
+  entryName: string;
+  fileName: string;
+  size: number;
+  content?: string;
+}
+
+interface FetchApiData {
+  content: string;
+  fileName?: string;
+  authorId?: string;
+  authorName?: string;
+  authorLink?: string;
+  description?: string;
+  readme?: ArchiveReadme;
+  candidates?: ProjectFileCandidate[];
+}
 
 interface PendingCredit {
   result: SearchResult;
@@ -12,6 +35,15 @@ interface PendingCredit {
   bytes?: Uint8Array;
   fileName?: string;
   openUrl: string;
+  readme?: ArchiveReadme;
+  description?: string;
+}
+
+interface PendingChoice {
+  result: SearchResult;
+  candidates: ProjectFileCandidate[];
+  readme?: ArchiveReadme;
+  description?: string;
 }
 
 interface UstSearchModalProps {
@@ -25,12 +57,21 @@ const i18nTexts = {
   zh: {
     title: '在线搜索 UST 工程文件',
     placeholder: '输入曲名搜索 UST...',
+    searchHint: '请用日文原曲名搜索（中文/英文译名通常搜不到）',
     search: '搜索',
     searching: '搜索中...',
     loadMore: '加载更多',
     noResults: '未找到相关 UST 文件',
     noResultsHint: '请尝试更精确的曲名，或手动从 BowlRoll 等网站下载',
     resultsFrom: '共 {count} 个结果',
+    showOthers: '显示其余 {n} 个结果（标题不含 UST/VSQ）',
+    hideOthers: '收起其余结果',
+    anonymous: '匿名',
+    readmeLabel: '压缩包内说明文件',
+    descriptionLabel: 'BowlRoll 简介',
+    chooseFileTitle: '压缩包内有多个工程文件',
+    chooseFileBody: '请选择要加载的文件：',
+    cancel: '取消',
     download: '加载',
     downloading: '加载中...',
     openInNewTab: '在新标签页打开',
@@ -64,12 +105,21 @@ const i18nTexts = {
   en: {
     title: 'Search UST Files Online',
     placeholder: 'Enter song name to search UST...',
+    searchHint: "Search with the original Japanese song title — translated titles usually won't match",
     search: 'Search',
     searching: 'Searching...',
     loadMore: 'Load more',
     noResults: 'No UST files found',
     noResultsHint: 'Try a more precise song name, or download manually from BowlRoll etc.',
     resultsFrom: '{count} results',
+    showOthers: 'Show {n} more results (no UST/VSQ in title)',
+    hideOthers: 'Hide other results',
+    anonymous: 'Anonymous',
+    readmeLabel: 'README from archive',
+    descriptionLabel: 'BowlRoll description',
+    chooseFileTitle: 'Multiple project files in archive',
+    chooseFileBody: 'Choose the file to load:',
+    cancel: 'Cancel',
     download: 'Load',
     downloading: 'Loading...',
     openInNewTab: 'Open in new tab',
@@ -103,12 +153,21 @@ const i18nTexts = {
   ja: {
     title: 'USTファイルをオンライン検索',
     placeholder: '曲名を入力してUSTを検索...',
+    searchHint: '',
     search: '検索',
     searching: '検索中...',
     loadMore: 'さらに読み込む',
     noResults: 'USTファイルが見つかりませんでした',
     noResultsHint: 'より正確な曲名で試すか、BowlRollなどから手動でダウンロードしてください',
     resultsFrom: '{count}件の結果',
+    showOthers: 'その他の結果を表示（{n}件・タイトルにUST/VSQなし）',
+    hideOthers: 'その他の結果を隠す',
+    anonymous: '匿名',
+    readmeLabel: '同梱の説明ファイル',
+    descriptionLabel: 'BowlRoll 概要',
+    chooseFileTitle: 'アーカイブに複数のプロジェクトファイルがあります',
+    chooseFileBody: '読み込むファイルを選択してください：',
+    cancel: 'キャンセル',
     download: '読み込む',
     downloading: '読み込み中...',
     openInNewTab: '新しいタブで開く',
@@ -181,15 +240,39 @@ function formatUploadedAt(value: string | undefined, language: 'zh' | 'en' | 'ja
   return datePart;
 }
 
+// user_id 为 0 表示 BowlRoll 匿名投稿
+function isAnonymousAuthor(result: SearchResult): boolean {
+  return result.authorId === '0';
+}
+
+function getAuthorDisplayName(result: SearchResult, language: 'zh' | 'en' | 'ja'): string | null {
+  if (isAnonymousAuthor(result)) return i18nTexts[language].anonymous;
+  return result.authorName || getAuthorAccountId(result);
+}
+
 function buildAttributionTemplate(result: SearchResult, language: 'zh' | 'en' | 'ja'): string {
-  const accountId =
-    getAuthorAccountId(result) ||
+  const authorName =
+    getAuthorDisplayName(result, language) ||
     (language === 'ja' ? '不明' : language === 'zh' ? '未知' : 'unknown');
   const ustAuthorLabel = language === 'en' ? 'UST author' : 'UST作者';
   const sourceLabel = language === 'ja' ? '配布元' : language === 'zh' ? '来源' : 'Source';
   const header = language === 'en' ? '[Credits]' : '【使用素材】';
 
-  return [header, `${ustAuthorLabel}：${accountId}`, `${sourceLabel}：BowlRoll`, result.link].join('\n');
+  return [header, `${ustAuthorLabel}：${authorName}`, `${sourceLabel}：BowlRoll`, result.link].join('\n');
+}
+
+function base64ToBytes(content: string): Uint8Array {
+  const binaryStr = atob(content);
+  const bytes = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) {
+    bytes[i] = binaryStr.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function formatFileSize(size: number): string {
+  if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(size / 1024))} KB`;
 }
 
 function enrichResultFromApi(result: SearchResult, data: Record<string, unknown>): SearchResult {
@@ -218,6 +301,9 @@ export const UstSearchModal: React.FC<UstSearchModalProps> = ({ isOpen, onClose,
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [pendingCredit, setPendingCredit] = useState<PendingCredit | null>(null);
+  const [pendingChoice, setPendingChoice] = useState<PendingChoice | null>(null);
+  const [choiceLoadingEntry, setChoiceLoadingEntry] = useState<string | null>(null);
+  const [showOthers, setShowOthers] = useState(false);
   const [creditCountdown, setCreditCountdown] = useState(CREDIT_CONFIRM_DELAY_SEC);
   const [copiedTemplate, setCopiedTemplate] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -238,6 +324,9 @@ export const UstSearchModal: React.FC<UstSearchModalProps> = ({ isOpen, onClose,
       setPage(1);
       setHasMore(false);
       setPendingCredit(null);
+      setPendingChoice(null);
+      setChoiceLoadingEntry(null);
+      setShowOthers(false);
       setCreditCountdown(CREDIT_CONFIRM_DELAY_SEC);
       setCopiedTemplate(false);
     }
@@ -287,6 +376,7 @@ export const UstSearchModal: React.FC<UstSearchModalProps> = ({ isOpen, onClose,
       setError('');
       setResults([]);
       setHasSearched(true);
+      setShowOthers(false);
     }
 
     try {
@@ -320,45 +410,91 @@ export const UstSearchModal: React.FC<UstSearchModalProps> = ({ isOpen, onClose,
     void runSearch(page + 1, true);
   };
 
+  const fetchProject = async (result: SearchResult, entryName?: string): Promise<FetchApiData> => {
+    const entryParam = entryName ? `&entry=${encodeURIComponent(entryName)}` : '';
+    const res = await fetch(
+      `/api/search-ust?action=fetch&url=${encodeURIComponent(result.link)}${entryParam}`,
+    );
+    if (!res.ok) {
+      const errData = await res.json().catch(() => null);
+      throw new Error(errData?.error || `HTTP ${res.status}`);
+    }
+    return (await res.json()) as FetchApiData;
+  };
+
+  const openCreditForFile = (
+    result: SearchResult,
+    bytes: Uint8Array,
+    fileName: string | undefined,
+    extras: { readme?: ArchiveReadme; description?: string },
+  ) => {
+    setPendingCredit({
+      action: 'load',
+      bytes,
+      fileName: fileName || result.title.replace(/[\\/:*?"<>|]/g, '_') + '.ust',
+      result,
+      openUrl: result.link,
+      readme: extras.readme,
+      description: extras.description,
+    });
+  };
+
   const handleLoadUst = async (result: SearchResult) => {
     if (loadingUrl) return;
     setLoadingUrl(result.link);
     setError('');
 
     try {
-      const res = await fetch(`/api/search-ust?action=fetch&url=${encodeURIComponent(result.link)}`);
-      if (!res.ok) {
-        const errData = await res.json().catch(() => null);
-        throw new Error(errData?.error || `HTTP ${res.status}`);
+      const data = await fetchProject(result);
+      const enrichedResult = enrichResultFromApi(result, data as unknown as Record<string, unknown>);
+
+      // 压缩包里有多个工程文件时，先让用户选择再进入标注确认
+      if (data.candidates && data.candidates.length > 1) {
+        setPendingChoice({
+          result: enrichedResult,
+          candidates: data.candidates,
+          readme: data.readme,
+          description: data.description,
+        });
+        return;
       }
 
-      const data = await res.json();
-      const binaryStr = atob(data.content);
-      const bytes = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) {
-        bytes[i] = binaryStr.charCodeAt(i);
-      }
-
-      const fileName =
-        typeof data.fileName === 'string' && data.fileName
-          ? data.fileName
-          : result.title.replace(/[\\/:*?"<>|]/g, '_') + '.ust';
-
-      const enrichedResult = enrichResultFromApi(result, data as Record<string, unknown>);
-
-      setPendingCredit({
-        action: 'load',
-        bytes,
-        fileName,
-        result: enrichedResult,
-        openUrl: enrichedResult.link,
-      });
+      openCreditForFile(enrichedResult, base64ToBytes(data.content), data.fileName, data);
     } catch (err) {
       console.error('Load UST error:', err);
       const code = err instanceof Error ? err.message : undefined;
       setError(mapLoadError(code, t));
     } finally {
       setLoadingUrl(null);
+    }
+  };
+
+  const handleChooseCandidate = async (candidate: ProjectFileCandidate) => {
+    if (!pendingChoice || choiceLoadingEntry) return;
+    const { result, readme, description } = pendingChoice;
+
+    // 内容已内联时直接使用；过大未内联时带 entry 参数二次请求
+    if (candidate.content) {
+      openCreditForFile(result, base64ToBytes(candidate.content), candidate.fileName, { readme, description });
+      setPendingChoice(null);
+      return;
+    }
+
+    setChoiceLoadingEntry(candidate.entryName);
+    try {
+      const data = await fetchProject(result, candidate.entryName);
+      openCreditForFile(result, base64ToBytes(data.content), data.fileName || candidate.fileName, {
+        readme,
+        description,
+      });
+      setPendingChoice(null);
+    } catch (err) {
+      console.error('Load UST entry error:', err);
+      const code = err instanceof Error ? err.message : undefined;
+      setError(mapLoadError(code, t));
+      setPendingChoice(null);
+    } finally {
+      setChoiceLoadingEntry(null);
     }
   };
 
@@ -410,7 +546,7 @@ export const UstSearchModal: React.FC<UstSearchModalProps> = ({ isOpen, onClose,
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       handleSearch();
-    } else if (e.key === 'Escape' && !pendingCredit) {
+    } else if (e.key === 'Escape' && !pendingCredit && !pendingChoice) {
       onClose();
     }
   };
@@ -429,6 +565,96 @@ export const UstSearchModal: React.FC<UstSearchModalProps> = ({ isOpen, onClose,
         creditCountdown.toString(),
       );
 
+  // 标题含 ust/vsq 关键词的结果优先展示，其余折叠到末尾
+  const matchedResults = results.filter((result) => isProjectLikeTitle(result.title));
+  const otherResults = results.filter((result) => !isProjectLikeTitle(result.title));
+
+  const renderResultRow = (result: SearchResult) => {
+    const uploaded = formatUploadedAt(result.uploadedAt, language);
+    const authorDisplay = getAuthorDisplayName(result, language);
+    return (
+      <div
+        key={result.fileId}
+        className="group flex items-start gap-3 p-3 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors"
+      >
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">{result.title}</h3>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400 shrink-0">
+              {t.sourceBowlroll}
+            </span>
+          </div>
+          {(authorDisplay || uploaded || typeof result.downloadCount === 'number') && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400">
+              {authorDisplay && (
+                <span className="inline-flex items-center gap-1">
+                  <User className="w-3 h-3 shrink-0" />
+                  <span>{t.ustAuthor}：</span>
+                  {result.authorLink ? (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenLinkRequest(result, result.authorLink!)}
+                      className="hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline"
+                      title={t.viewAuthor}
+                    >
+                      {authorDisplay}
+                    </button>
+                  ) : (
+                    <span>{authorDisplay}</span>
+                  )}
+                </span>
+              )}
+              {uploaded && (
+                <span>
+                  {authorDisplay && <span className="mr-2 text-zinc-300 dark:text-zinc-600">·</span>}
+                  {t.uploadedAt}：{uploaded}
+                </span>
+              )}
+              {typeof result.downloadCount === 'number' && (
+                <span>
+                  {(authorDisplay || uploaded) && (
+                    <span className="mr-2 text-zinc-300 dark:text-zinc-600">·</span>
+                  )}
+                  {t.downloadCount.replace('{count}', result.downloadCount.toString())}
+                </span>
+              )}
+            </div>
+          )}
+          {result.snippet && (
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2">{result.snippet}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => handleOpenLinkRequest(result, result.link)}
+            className="p-2 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+            title={t.openInNewTab}
+          >
+            <ExternalLink className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => handleLoadUst(result)}
+            disabled={loadingUrl !== null || pendingCredit !== null || pendingChoice !== null}
+            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-600/50 text-white rounded-lg text-xs font-medium transition-all flex items-center gap-1.5"
+          >
+            {loadingUrl === result.link ? (
+              <>
+                <Loader2 className="w-3 h-3 animate-spin" />
+                <span>{t.downloading}</span>
+              </>
+            ) : (
+              <>
+                <Download className="w-3 h-3" />
+                <span>{t.download}</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <>
       {pendingCredit && (
@@ -445,6 +671,21 @@ export const UstSearchModal: React.FC<UstSearchModalProps> = ({ isOpen, onClose,
               <p className="mt-2 text-sm text-amber-800/90 dark:text-amber-100/80 leading-relaxed">{t.creditBody}</p>
             </div>
             <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-3 custom-scrollbar">
+              {(pendingCredit.readme || pendingCredit.description) && (
+                <>
+                  <div className="text-xs font-medium text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 shrink-0" />
+                    <span>
+                      {pendingCredit.readme
+                        ? `${t.readmeLabel}：${pendingCredit.readme.fileName}`
+                        : t.descriptionLabel}
+                    </span>
+                  </div>
+                  <pre className="max-h-40 overflow-y-auto custom-scrollbar p-3 rounded-xl bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-xs text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap break-all">
+                    {pendingCredit.readme ? pendingCredit.readme.content : pendingCredit.description}
+                  </pre>
+                </>
+              )}
               <div className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{t.creditTemplateLabel}</div>
               <pre className="p-3 rounded-xl bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-xs text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap break-all select-all">
                 {creditTemplate}
@@ -472,9 +713,57 @@ export const UstSearchModal: React.FC<UstSearchModalProps> = ({ isOpen, onClose,
         </div>
       )}
 
+      {pendingChoice && !pendingCredit && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div
+            className="w-full max-w-md max-h-[min(90vh,640px)] flex flex-col bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="shrink-0 px-6 py-4 border-b border-zinc-200 dark:border-zinc-800">
+              <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">{t.chooseFileTitle}</h3>
+              <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{t.chooseFileBody}</p>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-1 custom-scrollbar">
+              {pendingChoice.candidates.map((candidate) => (
+                <button
+                  key={candidate.entryName}
+                  type="button"
+                  onClick={() => void handleChooseCandidate(candidate)}
+                  disabled={choiceLoadingEntry !== null}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl text-left hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors disabled:opacity-50"
+                >
+                  <FileText className="w-4 h-4 shrink-0 text-zinc-400" />
+                  <span className="flex-1 min-w-0 text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">
+                    {candidate.fileName}
+                  </span>
+                  {choiceLoadingEntry === candidate.entryName ? (
+                    <Loader2 className="w-4 h-4 shrink-0 animate-spin text-indigo-500" />
+                  ) : (
+                    <span className="shrink-0 text-xs text-zinc-400">{formatFileSize(candidate.size)}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+            <div className="shrink-0 px-6 py-4 border-t border-zinc-200 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setPendingChoice(null)}
+                disabled={choiceLoadingEntry !== null}
+                className="w-full py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors disabled:opacity-50"
+              >
+                {t.cancel}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div
         className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-        onClick={pendingCredit ? undefined : onClose}
+        onClick={pendingCredit || pendingChoice ? undefined : onClose}
       >
       <div
         className="relative w-full max-w-lg max-h-[80vh] bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 flex flex-col overflow-hidden"
@@ -484,7 +773,7 @@ export const UstSearchModal: React.FC<UstSearchModalProps> = ({ isOpen, onClose,
           <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{t.title}</h2>
           <button
             onClick={onClose}
-            disabled={pendingCredit !== null}
+            disabled={pendingCredit !== null || pendingChoice !== null}
             className="p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 dark:text-zinc-400 transition-colors disabled:opacity-40 disabled:pointer-events-none"
           >
             <X className="w-5 h-5" />
@@ -520,6 +809,9 @@ export const UstSearchModal: React.FC<UstSearchModalProps> = ({ isOpen, onClose,
               )}
             </button>
           </div>
+          {t.searchHint && (
+            <p className="mt-2 text-xs text-zinc-400 dark:text-zinc-500">{t.searchHint}</p>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar">
@@ -545,91 +837,29 @@ export const UstSearchModal: React.FC<UstSearchModalProps> = ({ isOpen, onClose,
           )}
 
           <div className="px-3 pb-3 space-y-1">
-            {results.map((result) => {
-              const uploaded = formatUploadedAt(result.uploadedAt, language);
-              const accountId = getAuthorAccountId(result);
-              return (
-                <div
-                  key={result.fileId}
-                  className="group flex items-start gap-3 p-3 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors"
+            {matchedResults.map(renderResultRow)}
+            {otherResults.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowOthers((prev) => !prev)}
+                  className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
                 >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">{result.title}</h3>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400 shrink-0">
-                        {t.sourceBowlroll}
-                      </span>
-                    </div>
-                    {(accountId || uploaded || typeof result.downloadCount === 'number') && (
-                      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400">
-                        {accountId && (
-                          <span className="inline-flex items-center gap-1">
-                            <User className="w-3 h-3 shrink-0" />
-                            <span>{t.ustAuthor}：</span>
-                            {result.authorLink ? (
-                              <button
-                                type="button"
-                                onClick={() => handleOpenLinkRequest(result, result.authorLink!)}
-                                className="hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline"
-                                title={t.viewAuthor}
-                              >
-                                {accountId}
-                              </button>
-                            ) : (
-                              <span>{accountId}</span>
-                            )}
-                          </span>
-                        )}
-                        {uploaded && (
-                          <span>
-                            {accountId && <span className="mr-2 text-zinc-300 dark:text-zinc-600">·</span>}
-                            {t.uploadedAt}：{uploaded}
-                          </span>
-                        )}
-                        {typeof result.downloadCount === 'number' && (
-                          <span>
-                            {(accountId || uploaded) && (
-                              <span className="mr-2 text-zinc-300 dark:text-zinc-600">·</span>
-                            )}
-                            {t.downloadCount.replace('{count}', result.downloadCount.toString())}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                    {result.snippet && (
-                      <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2">{result.snippet}</p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenLinkRequest(result, result.link)}
-                      className="p-2 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                      title={t.openInNewTab}
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleLoadUst(result)}
-                      disabled={loadingUrl !== null || pendingCredit !== null}
-                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-600/50 text-white rounded-lg text-xs font-medium transition-all flex items-center gap-1.5"
-                    >
-                      {loadingUrl === result.link ? (
-                        <>
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                          <span>{t.downloading}</span>
-                        </>
-                      ) : (
-                        <>
-                          <Download className="w-3 h-3" />
-                          <span>{t.download}</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+                  {showOthers ? (
+                    <>
+                      <ChevronUp className="w-3.5 h-3.5" />
+                      <span>{t.hideOthers}</span>
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="w-3.5 h-3.5" />
+                      <span>{t.showOthers.replace('{n}', otherResults.length.toString())}</span>
+                    </>
+                  )}
+                </button>
+                {showOthers && otherResults.map(renderResultRow)}
+              </>
+            )}
           </div>
 
           {hasMore && results.length > 0 && (

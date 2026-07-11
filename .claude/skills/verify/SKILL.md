@@ -39,6 +39,18 @@ const browser = await chromium.launch({ channel: 'msedge', headless: true });
   从 disabled 变为可用再点。
 - Playwright `waitForFunction(fn, arg, options)` —— options 是第三个参数，别放第二个。
 
+## 在线检索功能（BowlRoll）
+
+- 需同时启动 `npm run dev:api`（Express, 端口 3001，vite 代理 /api）。
+- 首次须知弹窗由 localStorage `hasSeenNotice` 控制；多次导航测试用
+  `context.addInitScript(() => localStorage.removeItem('hasSeenNotice'))`，
+  语言切换按钮（中文/English/日本語）只在这个弹窗里。
+- 入口按钮文本含 `在线搜索`；模态内搜索按钮用
+  `getByRole('button', { name: '搜索', exact: true })`（hasText 会撞到入口按钮）。
+- 下载/多文件/README 等 UI 流程可用 `page.route('**/api/search-ust?action=fetch*')`
+  注入合成响应驱动，不依赖真实下载；真实搜索用 `千本桜`（BowlRoll 可达时约 40 条/页）。
+- 服务端解压/README/Shift-JIS 文件名逻辑有独立回归脚本：`npx tsx scripts/verify-extract.mts`。
+
 ## 值得跑的流程
 
 1. 导入 UST → 画布出现，拖动进度条口型变化
