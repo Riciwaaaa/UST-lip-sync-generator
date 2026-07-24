@@ -14,7 +14,7 @@
 
 ## 简体中文
 
-一款纯前端的网页工具，可根据歌声合成工程文件（`.ust`、`.ustx`、`.vsqx`）与你自定义的嘴型图，自动生成口型动画视频。适合 VTuber、动画作者与歌声合成创作者。
+一款纯前端的网页工具，可根据歌声合成工程文件（`.ust`、`.ustx`、`.vsqx`）与你自定义的嘴型图，自动生成口型动画视频。
 
 **所有处理都在浏览器内完成**：没有后端、不上传任何文件、主功能无需任何 API Key 或环境变量。
 
@@ -136,7 +136,7 @@ MIT License
 
 ## English
 
-A browser-based tool that automatically generates lip-sync animation videos from vocal-synth project files (`.ust`, `.ustx`, `.vsqx`) and your own mouth-shape images. Great for VTubers, animators, and vocal-synth creators.
+A browser-based tool that automatically generates lip-sync animation videos from vocal-synth project files (`.ust`, `.ustx`, `.vsqx`) and your own mouth-shape images. 
 
 **Everything runs in your browser** — no backend, no uploads, and no API keys or environment variables for the core features.
 
