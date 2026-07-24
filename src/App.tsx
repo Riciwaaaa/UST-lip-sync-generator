@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, DragEvent, ChangeEvent } from 'react';
-import { UploadCloud, FileText, AlertCircle, Clock, Music, Play, Pause, Image as ImageIcon, Video, Download, Settings, Layers, X, Globe, Sun, Moon, Github, Search } from 'lucide-react';
+import { UploadCloud, FileText, AlertCircle, Clock, Music, Play, Pause, Image as ImageIcon, Video, Download, Settings, Layers, X, Globe, Sun, Moon, Github, Search, Info } from 'lucide-react';
+import { zipSync, unzipSync, strToU8, strFromU8 } from 'fflate';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 import coreURL from '@ffmpeg/core?url';
@@ -80,7 +81,19 @@ const i18n = {
     language: "语言",
     notice: "须知",
     noticeTitle: "使用须知",
-    noticeContent: "26/6/25更新：感谢ink老师贡献的ust在线搜索功能！\n26/4/19更新：现在也支持导入ustx/vsqx文件了！另外还做了一点ui优化。\n26/3/22更新：现在可以进入全屏模式直接录屏了，移动端导出失败可以试试这么做。\n\n针对日语UST做的，什么类型的UST都能用。其它语言的UST理论上也可以用，但嘴型只能用单字覆盖一个个传。需要忽略嘴型设置里的五个元音。\n受性能限制，不建议在移动端浏览器使用。\n可以从bowlroll等地找到各种公开配布的UST文件，发布使用他人UST制作的内容时需要标注原作者。\n有什么问题可以联系我 -> \nB站：UID 487559302\nemail: riciwaaaa@gmail.com\n",
+    noticeUsageTitle: "基本使用须知",
+    noticeUpdatesTitle: "更新内容",
+    noticeUsage: "针对日语UST做的，什么类型的UST都能用。其它语言的UST理论上也可以用，但嘴型只能用单字覆盖一个个传。需要忽略嘴型设置里的五个元音。\n受性能限制，不建议在移动端浏览器使用。\n可以从bowlroll等地找到各种公开配布的UST文件，发布使用他人UST制作的内容时需要标注原作者。\n有什么问题可以联系我 -> \nB站：UID 487559302\nemail: riciwaaaa@gmail.com",
+    noticeUpdates: "26/6/25更新：感谢ink老师贡献的ust在线搜索功能！\n26/4/19更新：现在也支持导入ustx/vsqx文件了！另外还做了一点ui优化。\n26/3/22更新：现在可以进入全屏模式直接录屏了，移动端导出失败可以试试这么做。",
+    buyMeACoffee: "☕ 请我喝杯咖啡",
+    coffeePending: "（图片待上传）",
+    labelClickToHide: "点击隐藏",
+    labelClickToShow: "点击显示",
+    exportPreset: "导出预设",
+    importPreset: "导入预设",
+    presetEmpty: "还没有上传任何嘴型图，无法导出预设。",
+    presetExportFailed: "预设导出失败，请重试。",
+    presetImportFailed: "预设导入失败：文件可能已损坏，或不是本工具导出的预设包。",
     confirm: "确认",
     step1: "嘴型设置",
     step2: "UST/音频/背景图",
@@ -169,7 +182,19 @@ const i18n = {
     language: "Language",
     notice: "Notice",
     noticeTitle: "Usage Notice",
-    noticeContent: "26/6/25 Update: Huge thanks to ink for contributing the ust online search feature!\n26/4/19 Update: Now supports importing .ustx and .vsqx files! We've also made a few UI improvements.\n26/3/22 Update: You can now enter fullscreen mode to record your screen directly. If exporting fails on mobile, you can try this method.\n\nDesigned for Japanese USTs, but any type of UST will work. USTs in other languages can theoretically be used, but mouth shapes must be uploaded one by one using the single-character override feature. You will need to ignore the five basic vowel settings.\nDue to performance limitations, using this tool on mobile browsers is highly not recommended. \nYou can find various publicly distributed UST files on sites like BowlRoll. Please note that when publishing content made using someone else's UST, you must credit the original author.\nIf you have any questions or feedback, feel free to contact me -> \nemail: riciwaaaa@gmail.com",
+    noticeUsageTitle: "Basic Usage Notes",
+    noticeUpdatesTitle: "Changelog",
+    noticeUsage: "Designed for Japanese USTs, but any type of UST will work. USTs in other languages can theoretically be used, but mouth shapes must be uploaded one by one using the single-character override feature. You will need to ignore the five basic vowel settings.\nDue to performance limitations, using this tool on mobile browsers is highly not recommended.\nYou can find various publicly distributed UST files on sites like BowlRoll. Please note that when publishing content made using someone else's UST, you must credit the original author.\nIf you have any questions or feedback, feel free to contact me -> \nemail: riciwaaaa@gmail.com",
+    noticeUpdates: "26/6/25 Update: Huge thanks to ink for contributing the ust online search feature!\n26/4/19 Update: Now supports importing .ustx and .vsqx files! We've also made a few UI improvements.\n26/3/22 Update: You can now enter fullscreen mode to record your screen directly. If exporting fails on mobile, you can try this method.",
+    buyMeACoffee: "☕ Buy me a coffee",
+    coffeePending: "(image coming soon)",
+    labelClickToHide: "Click to hide",
+    labelClickToShow: "Click to show",
+    exportPreset: "Export Preset",
+    importPreset: "Import Preset",
+    presetEmpty: "No mouth images uploaded yet — nothing to export.",
+    presetExportFailed: "Failed to export preset. Please try again.",
+    presetImportFailed: "Failed to import preset: the file may be corrupted or was not exported by this tool.",
     confirm: "Confirm",
     step1: "Mouth Shapes",
     step2: "UST(X) / Audio / Background",
@@ -258,7 +283,19 @@ const i18n = {
     language: "言語",
     notice: "注意事項",
     noticeTitle: "注意事項",
-    noticeContent: "26/6/25 アップデート: ustオンライン検索機能を提供してくださったinkさんに、心より感謝いたします！/n26/4/19 アップデート: 新たに .ustx および .vsqx ファイルのインポートに対応しました！また、UIも少し使いやすく改善しています。/n26/3/22 アップデート: フルスクリーンモードに入って直接画面録画ができるようになりました。モバイル端末でエクスポートに失敗する場合は、この方法をお試しください。\n\n日本語のUST向けに作られていますが、どの種類のUSTでも使用可能です。他言語のUSTも理論上は使用できますが、口の形は「単字特例（個別の文字の上書き）」機能を使って一つずつアップロードする必要があります。その場合、基本設定の5つの母音は無視してください。\nパフォーマンスの制限により、スマートフォンなどのモバイルブラウザでの使用は推奨していません（PC環境を推奨します）。\nBowlRollなどのサイトで、公開・配布されている様々なUSTファイルを見つけることができます。他の方が作成したUSTを使用して動画などの制作物を公開する際は、必ず原作者のクレジット（お名前）を表記してください。\nご質問や不具合の報告があれば、こちらまでご連絡ください -> \nemail: riciwaaaa@gmail.com",
+    noticeUsageTitle: "基本的な使い方",
+    noticeUpdatesTitle: "更新履歴",
+    noticeUsage: "日本語のUST向けに作られていますが、どの種類のUSTでも使用可能です。他言語のUSTも理論上は使用できますが、口の形は「単字特例（個別の文字の上書き）」機能を使って一つずつアップロードする必要があります。その場合、基本設定の5つの母音は無視してください。\nパフォーマンスの制限により、スマートフォンなどのモバイルブラウザでの使用は推奨していません（PC環境を推奨します）。\nBowlRollなどのサイトで、公開・配布されている様々なUSTファイルを見つけることができます。他の方が作成したUSTを使用して動画などの制作物を公開する際は、必ず原作者のクレジット（お名前）を表記してください。\nご質問や不具合の報告があれば、こちらまでご連絡ください -> \nemail: riciwaaaa@gmail.com",
+    noticeUpdates: "26/6/25 アップデート: ustオンライン検索機能を提供してくださったinkさんに、心より感謝いたします！\n26/4/19 アップデート: 新たに .ustx および .vsqx ファイルのインポートに対応しました！また、UIも少し使いやすく改善しています。\n26/3/22 アップデート: フルスクリーンモードに入って直接画面録画ができるようになりました。モバイル端末でエクスポートに失敗する場合は、この方法をお試しください。",
+    buyMeACoffee: "☕ コーヒーをおごる",
+    coffeePending: "（画像は準備中）",
+    labelClickToHide: "クリックで非表示",
+    labelClickToShow: "クリックで表示",
+    exportPreset: "プリセット書き出し",
+    importPreset: "プリセット読み込み",
+    presetEmpty: "口の形の画像が未設定のため、書き出せません。",
+    presetExportFailed: "プリセットの書き出しに失敗しました。もう一度お試しください。",
+    presetImportFailed: "プリセットの読み込みに失敗しました。ファイルが破損しているか、このツールで書き出したものではない可能性があります。",
     confirm: "確認",
     step1: "口パク設定",
     step2: "UST(X) / 音声 / 背景",
@@ -443,6 +480,24 @@ const parseGifFile = async (file: File, maxDimension: number = 800): Promise<Gif
 
 const isWebpFile = (file: File) => file.type === 'image/webp' || file.name.toLowerCase().endsWith('.webp');
 
+// TODO(riciwaaaa): 图片上传后填写路径。把图片放进项目根目录的 public/ 文件夹(没有就新建),
+// 然后填 '/文件名'。例如 public/logo.png → '/logo.png'。留空时按钮回退为默认图标/占位文案。
+const NOTICE_LOGO_SRC = '';          // 「使用须知」按钮的 logo 图片
+const BUY_ME_A_COFFEE_IMG_SRC = '';  // 「Buy me a coffee」点开展示的图片
+
+// 嘴型预设 zip 里图片的扩展名 ↔ MIME 映射与魔数嗅探(拖拽来源的文件 type 可能为空)
+const IMAGE_EXT_MIME: Record<string, string> = {
+  png: 'image/png', gif: 'image/gif', webp: 'image/webp', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+};
+const sniffImageExt = (bytes: Uint8Array): string | null => {
+  if (bytes.length > 6 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return 'gif';        // GIF8
+  if (bytes.length > 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'png'; // .PNG
+  if (bytes.length > 12 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46
+      && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return 'webp'; // RIFF....WEBP
+  if (bytes.length > 2 && bytes[0] === 0xff && bytes[1] === 0xd8) return 'jpg';                              // JPEG SOI
+  return null;
+};
+
 // 用浏览器原生 ImageDecoder(WebCodecs)解码动画 webp 为 GifFrame[],复用现有 GIF 播放/导出管线。
 // 零新依赖。静态 webp 或不支持 ImageDecoder 时返回 null,交给调用方的静态 new Image() 路径。
 const parseAnimatedWebp = async (file: File, maxDimension: number): Promise<GifFrame[] | null> => {
@@ -509,10 +564,29 @@ const yieldToMain = (): Promise<void> => {
 };
 
 export default function App() {
-  const [language, setLanguage] = useState<Language>('zh');
-  const languageRef = useRef<Language>('zh');
-  useEffect(() => { languageRef.current = language; }, [language]);
+  const LANGUAGE_ORDER: Language[] = ['zh', 'en', 'ja'];
+  const LANGUAGE_LABELS: Record<Language, string> = { zh: '中', en: 'EN', ja: '日' };
+
+  const [language, setLanguage] = useState<Language>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('language');
+      if (saved === 'zh' || saved === 'en' || saved === 'ja') return saved;
+    }
+    return 'zh';
+  });
+  const languageRef = useRef<Language>(language);
+  useEffect(() => {
+    languageRef.current = language;
+    localStorage.setItem('language', language);
+  }, [language]);
+
+  // 语言不再走弹窗，点一下切到下一种
+  const cycleLanguage = () => {
+    setLanguage(prev => LANGUAGE_ORDER[(LANGUAGE_ORDER.indexOf(prev) + 1) % LANGUAGE_ORDER.length]);
+  };
+
   const [showModal, setShowModal] = useState(false);
+  const [showCoffee, setShowCoffee] = useState(false);
 
   // ------------------------------------------------------------------------
   // 新增：深色/浅色模式 (Dark/Light Mode)
@@ -570,6 +644,10 @@ export default function App() {
   const mouthImageElementsRef = useRef<Record<MouthShape, HTMLImageElement | null>>({ a: null, i: null, u: null, e: null, o: null, default: null });
   const mouthGifFramesRef = useRef<Record<MouthShape, GifFrame[] | null>>({ a: null, i: null, u: null, e: null, o: null, default: null });
   
+  // 嘴型预设 zip 导出/导入
+  const presetInputRef = useRef<HTMLInputElement>(null);
+  const [isPresetBusy, setIsPresetBusy] = useState(false);
+
   // 新增：单字特例覆盖状态
   const [uniqueLyrics, setUniqueLyrics] = useState<string[]>([]);
   const [overrideImages, setOverrideImages] = useState<Record<string, string>>({});
@@ -582,6 +660,8 @@ export default function App() {
   const hintTimeoutRef = useRef<number | null>(null);
   const [isPoppedOut, setIsPoppedOut] = useState(false);
   const pipVideoRef = useRef<HTMLVideoElement | null>(null);
+  // 监视器右上角信息标签：点击隐藏；隐藏后悬停原位置仍会半透明浮现，再点即恢复
+  const [isMonitorLabelHidden, setIsMonitorLabelHidden] = useState(false);
 
   const [canvasSize, setCanvasSize] = useState({ width: 512, height: 512 });
   const isFirstImageRef = useRef(true);
@@ -2392,6 +2472,108 @@ export default function App() {
     drawCanvas(currentMouth, currentTime, currentNote ? currentNote.lyric : '');
   };
 
+  // ------------------------------------------------------------------------
+  // 嘴型预设：打包为 zip 导出 / 导入
+  // 应用只保留 blob: ObjectURL 而非原始 File，导出时 fetch 回二进制即可，
+  // 无需为此额外维护一份 File 状态。
+  // ------------------------------------------------------------------------
+  const handleExportPreset = async () => {
+    const shapes = (Object.keys(mouthImages) as MouthShape[]).filter(s => mouthImages[s]);
+    const lyrics = Object.keys(overrideImages).filter(l => overrideImages[l]);
+
+    if (shapes.length === 0 && lyrics.length === 0) {
+      alert(t.presetEmpty);
+      return;
+    }
+
+    setIsPresetBusy(true);
+    try {
+      const files: Record<string, Uint8Array> = {};
+      const manifest: {
+        version: number; generator: string;
+        mouths: Record<string, string>; overrides: Record<string, string>;
+      } = { version: 1, generator: 'ust-lip-sync-generator', mouths: {}, overrides: {} };
+
+      const grab = async (url: string) => {
+        const blob = await fetch(url).then(r => r.blob());
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        const fromMime = Object.keys(IMAGE_EXT_MIME).find(e => IMAGE_EXT_MIME[e] === blob.type);
+        return { bytes, ext: sniffImageExt(bytes) || fromMime || 'png' };
+      };
+
+      for (const shape of shapes) {
+        const { bytes, ext } = await grab(mouthImages[shape]);
+        const name = `mouths/${shape}.${ext}`;
+        files[name] = bytes;
+        manifest.mouths[shape] = name;
+      }
+
+      // 单字覆盖用序号做文件名，避免歌词中的字符成为非法路径；真实歌词记在 manifest 里
+      for (let i = 0; i < lyrics.length; i++) {
+        const { bytes, ext } = await grab(overrideImages[lyrics[i]]);
+        const name = `overrides/${i}.${ext}`;
+        files[name] = bytes;
+        manifest.overrides[lyrics[i]] = name;
+      }
+
+      files['manifest.json'] = strToU8(JSON.stringify(manifest, null, 2));
+
+      // 图片本身已是压缩格式，level 0 (store) 更快且体积几乎不变
+      const zipped = zipSync(files, { level: 0 });
+      const blob = new Blob([zipped as unknown as BlobPart], { type: 'application/zip' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `lipsync_preset_${Date.now()}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Preset export failed:', err);
+      alert(t.presetExportFailed);
+    } finally {
+      setIsPresetBusy(false);
+    }
+  };
+
+  const handleImportPreset = async (file: File | undefined | null) => {
+    if (!file) return;
+
+    setIsPresetBusy(true);
+    try {
+      const entries = unzipSync(new Uint8Array(await file.arrayBuffer()));
+      const manifestRaw = entries['manifest.json'];
+      if (!manifestRaw) throw new Error('manifest.json not found in preset zip');
+      const manifest = JSON.parse(strFromU8(manifestRaw));
+
+      const toFile = (path: string): File | null => {
+        const data = entries[path];
+        if (!data) return null;
+        const ext = (path.split('.').pop() || 'png').toLowerCase();
+        return new File([data as unknown as BlobPart], path.split('/').pop() || `image.${ext}`, {
+          type: IMAGE_EXT_MIME[ext] || 'image/png',
+        });
+      };
+
+      for (const [shape, path] of Object.entries(manifest.mouths || {})) {
+        if (!mouthShapeConfigs.some(c => c.id === shape)) continue;
+        const f = toFile(path as string);
+        if (f) await handleMouthImageUpload(shape as MouthShape, f);
+      }
+
+      // 覆盖图即使当前 UST 里没有对应歌词也照常载入，便于先导预设再导工程
+      for (const [lyric, path] of Object.entries(manifest.overrides || {})) {
+        const f = toFile(path as string);
+        if (f) await handleOverrideImageUpload(lyric, f);
+      }
+    } catch (err) {
+      console.error('Preset import failed:', err);
+      alert(t.presetImportFailed);
+    } finally {
+      setIsPresetBusy(false);
+      if (presetInputRef.current) presetInputRef.current.value = '';
+    }
+  };
+
   const handleMouthImageUpload = async (shape: MouthShape, file: File) => {
     if (!file) return;
 
@@ -2592,12 +2774,21 @@ export default function App() {
         >
           <Github className="w-5 h-5" />
         </a>
-        <button 
-          onClick={() => setShowModal(true)} 
-          className="p-2 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm shadow-md border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-full transition-all"
-          title={`${t.language} / ${t.notice}`}
+        <button
+          onClick={cycleLanguage}
+          className="w-9 h-9 flex items-center justify-center bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm shadow-md border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-full transition-all text-xs font-semibold"
+          title={t.language}
         >
-          <Globe className="w-5 h-5" />
+          {LANGUAGE_LABELS[language]}
+        </button>
+        <button
+          onClick={() => setShowModal(true)}
+          className="w-9 h-9 flex items-center justify-center overflow-hidden bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm shadow-md border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-full transition-all"
+          title={t.notice}
+        >
+          {NOTICE_LOGO_SRC
+            ? <img src={NOTICE_LOGO_SRC} alt={t.notice} className="w-full h-full object-cover" />
+            : <Info className="w-5 h-5" />}
         </button>
       </div>
 
@@ -2625,12 +2816,22 @@ export default function App() {
             >
               <Github className="w-5 h-5" />
             </a>
-            <button 
-              onClick={() => setShowModal(true)} 
-              className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 rounded-full transition-all"
-              title={`${t.language} / ${t.notice}`}
+            <button
+              onClick={cycleLanguage}
+              className="flex items-center gap-1.5 px-3 h-9 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 rounded-full transition-all"
+              title={t.language}
             >
-              <Globe className="w-5 h-5" />
+              <Globe className="w-4 h-4" />
+              <span className="text-sm font-semibold">{LANGUAGE_LABELS[language]}</span>
+            </button>
+            <button
+              onClick={() => setShowModal(true)}
+              className="w-9 h-9 flex items-center justify-center overflow-hidden text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 rounded-full transition-all"
+              title={t.notice}
+            >
+              {NOTICE_LOGO_SRC
+                ? <img src={NOTICE_LOGO_SRC} alt={t.notice} className="w-full h-full object-cover rounded-full" />
+                : <Info className="w-5 h-5" />}
             </button>
           </div>
         </div>
@@ -2640,34 +2841,36 @@ export default function App() {
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
-            <div className="p-6 space-y-6">
-              <div className="space-y-2 text-center">
-                <h3 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">{t.language}</h3>
-                <div className="flex justify-center space-x-2">
-                  {(['zh', 'en', 'ja'] as Language[]).map(lang => (
-                    <button
-                      key={lang}
-                      onClick={() => setLanguage(lang)}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        language === lang 
-                          ? 'bg-indigo-500 text-white' 
-                          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 hover:text-zinc-800 dark:hover:text-zinc-200'
-                      }`}
-                    >
-                      {lang === 'zh' ? '中文' : lang === 'en' ? 'English' : '日本語'}
-                    </button>
-                  ))}
-                </div>
+            <div className="p-6 space-y-5">
+              <div className="flex items-center justify-center gap-2">
+                {NOTICE_LOGO_SRC && (
+                  <img src={NOTICE_LOGO_SRC} alt="" className="w-8 h-8 rounded-full object-cover" />
+                )}
+                <h3 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">{t.noticeTitle}</h3>
               </div>
-              
+
               <div className="space-y-2">
-                <h3 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100 text-center">{t.noticeTitle}</h3>
-                <div className="h-40 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg p-4 overflow-y-auto border border-zinc-200 dark:border-zinc-800 text-sm text-zinc-600 dark:text-zinc-400 whitespace-pre-wrap custom-scrollbar">
-                  {t.noticeContent}
+                <h4 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">{t.noticeUsageTitle}</h4>
+                <div className="h-36 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg p-4 overflow-y-auto border border-zinc-200 dark:border-zinc-800 text-sm text-zinc-600 dark:text-zinc-400 whitespace-pre-wrap custom-scrollbar">
+                  {t.noticeUsage}
                 </div>
               </div>
+
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">{t.noticeUpdatesTitle}</h4>
+                <div className="h-28 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg p-4 overflow-y-auto border border-zinc-200 dark:border-zinc-800 text-sm text-zinc-600 dark:text-zinc-400 whitespace-pre-wrap custom-scrollbar">
+                  {t.noticeUpdates}
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowCoffee(true)}
+                className="w-full py-2 rounded-lg text-sm font-medium border border-amber-300/70 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
+              >
+                {t.buyMeACoffee}
+              </button>
             </div>
-            
+
             <div className="p-4 bg-zinc-50/50 dark:bg-zinc-800/50 border-t border-zinc-200 dark:border-zinc-800">
               <button
                 onClick={handleCloseModal}
@@ -2680,8 +2883,37 @@ export default function App() {
         </div>
       )}
 
+      {/* Buy me a coffee 图片弹层 */}
+      {showCoffee && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => setShowCoffee(false)}
+        >
+          <div
+            className="relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl p-4 max-w-sm w-full flex flex-col items-center gap-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowCoffee(false)}
+              className="absolute top-2 right-2 p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
+              title="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{t.buyMeACoffee}</h3>
+            {BUY_ME_A_COFFEE_IMG_SRC ? (
+              <img src={BUY_ME_A_COFFEE_IMG_SRC} alt={t.buyMeACoffee} className="w-full h-auto rounded-lg" />
+            ) : (
+              <div className="w-full aspect-square rounded-lg border-2 border-dashed border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-sm text-zinc-400 dark:text-zinc-500">
+                {t.coffeePending}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Main Content */}
-      <div 
+      <div
         ref={mainContainerRef}
         className={`flex-1 flex portrait:flex-col landscape:flex-row overflow-hidden ${isDraggingDivider ? 'select-none' : ''}`}
       >
@@ -2709,9 +2941,38 @@ export default function App() {
 
         {/* Step 1: Actors */}
         <section className="portrait:space-y-4 landscape:space-y-6">
-          <div className="flex items-center portrait:space-x-2 landscape:space-x-3 border-b border-zinc-200 dark:border-zinc-800 portrait:pb-2 landscape:pb-4">
-            <div className="portrait:w-6 portrait:h-6 landscape:w-8 landscape:h-8 portrait:text-sm landscape:text-base rounded-full bg-indigo-500/20 text-indigo-600 dark:bg-indigo-500/30 dark:text-indigo-400 flex items-center justify-center font-bold">1</div>
-            <h2 className="portrait:text-lg landscape:text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{t.step1}</h2>
+          <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 portrait:pb-2 landscape:pb-4">
+            <div className="flex items-center portrait:space-x-2 landscape:space-x-3">
+              <div className="portrait:w-6 portrait:h-6 landscape:w-8 landscape:h-8 portrait:text-sm landscape:text-base rounded-full bg-indigo-500/20 text-indigo-600 dark:bg-indigo-500/30 dark:text-indigo-400 flex items-center justify-center font-bold">1</div>
+              <h2 className="portrait:text-lg landscape:text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{t.step1}</h2>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="file"
+                ref={presetInputRef}
+                accept=".zip,application/zip"
+                className="hidden"
+                onChange={(e) => handleImportPreset(e.target.files?.[0])}
+              />
+              <button
+                onClick={handleExportPreset}
+                disabled={isPresetBusy}
+                title={t.exportPreset}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-800/60 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span className="portrait:hidden">{t.exportPreset}</span>
+              </button>
+              <button
+                onClick={() => presetInputRef.current?.click()}
+                disabled={isPresetBusy}
+                title={t.importPreset}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-800/60 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <UploadCloud className="w-3.5 h-3.5" />
+                <span className="portrait:hidden">{t.importPreset}</span>
+              </button>
+            </div>
           </div>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(60px,1fr))] landscape:grid-cols-[repeat(auto-fill,minmax(100px,1fr))] 2xl:landscape:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] portrait:gap-2 landscape:gap-4">
             {mouthShapeConfigs.map((config) => (
@@ -3189,9 +3450,15 @@ export default function App() {
                 </div>
                 
                 {!isFullscreen && (
-                  <div className="absolute top-4 right-4 px-3 py-1 rounded-full bg-white/50 backdrop-blur-md border border-black/10 text-xs font-mono text-black/80 z-10 pointer-events-none">
+                  // 隐藏态保留 opacity-0 而非卸载节点，使原区域仍可悬停浮现并点击恢复
+                  <button
+                    type="button"
+                    onClick={() => setIsMonitorLabelHidden(prev => !prev)}
+                    title={isMonitorLabelHidden ? t.labelClickToShow : t.labelClickToHide}
+                    className={`absolute top-4 right-4 px-3 py-1 rounded-full bg-white/50 backdrop-blur-md border border-black/10 text-xs font-mono text-black/80 z-10 cursor-pointer transition-opacity duration-200 hover:opacity-50 ${isMonitorLabelHidden ? 'opacity-0' : 'opacity-100'}`}
+                  >
                     {currentMouth} | {canvasSize.width}x{canvasSize.height}
-                  </div>
+                  </button>
                 )}
               </div>
 
