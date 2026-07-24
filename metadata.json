@@ -1,5 +1,0 @@
-{
-  "name": "UST/VSQX Lip Sync Generator",
-  "description": "A web tool that generates lip sync videos according to UST/USTX/VSQX files.",
-  "requestFramePermissions": []
-}

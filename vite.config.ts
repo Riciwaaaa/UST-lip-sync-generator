@@ -13,20 +13,14 @@ export default defineConfig(({mode}) => {
       // 被 Vite 预打包后 worker.js 会 404，导致开发环境 FFmpeg 永远加载失败
       exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'],
     },
-    define: {
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
       },
     },
     server: {
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
-      hmr: process.env.DISABLE_HMR !== 'true',
-      // 代理 /api/ 请求到本地 Express 服务或 Vercel 部署地址
-      // 本地开发时需要同时运行: npm run dev:api
+      // 代理 /api/ 请求到本地 Express 服务或 Vercel 部署地址。
+      // 在线搜索 UST 功能需另开 `npm run dev:api`；主功能不依赖此代理。
       proxy: {
         '/api': {
           target: `http://localhost:${apiPort}`,
