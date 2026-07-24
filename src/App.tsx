@@ -84,20 +84,20 @@ const i18n = {
     noticeUsageTitle: "基本使用须知",
     noticeUpdatesTitle: "更新内容",
     noticeUsage: "针对日语UST做的，什么类型的UST都能用。其它语言的UST理论上也可以用，但嘴型只能用单字覆盖一个个传。需要忽略嘴型设置里的五个元音。\n受性能限制，不建议在移动端浏览器使用。\n可以从bowlroll等地找到各种公开配布的UST文件，发布使用他人UST制作的内容时需要标注原作者。\n有什么问题可以联系我 -> \nB站：UID 487559302\nemail: riciwaaaa@gmail.com",
-    noticeUpdates: "26/6/25更新：感谢ink老师贡献的ust在线搜索功能！\n26/4/19更新：现在也支持导入ustx/vsqx文件了！另外还做了一点ui优化。\n26/3/22更新：现在可以进入全屏模式直接录屏了，移动端导出失败可以试试这么做。",
-    buyMeACoffee: "☕ 请我喝杯咖啡",
+    noticeUpdates: "26/7/24更新：新增了预设导出/导入。预览窗口右上角的标记显示现在可以点击隐藏了。理论上现在导出失败的情况会少一点了。\n26/6/25更新：感谢ink老师贡献的ust在线搜索功能！\n26/6/14更新：加了弹出窗口功能。\n26/4/19更新：现在也支持导入ustx/vsqx文件了！另外还做了一点ui优化。\n26/3/22更新：现在可以进入全屏模式直接录屏了，移动端导出失败可以试试这么做。",
+    buyMeACoffee: "☕ 赏杯奶茶？",
     coffeePending: "（图片待上传）",
     labelClickToHide: "点击隐藏",
     labelClickToShow: "点击显示",
     exportPreset: "导出预设",
     importPreset: "导入预设",
-    presetEmpty: "还没有上传任何嘴型图，无法导出预设。",
+    presetEmpty: "还没有嘴型图或背景可以导出，无法生成预设。",
     presetExportFailed: "预设导出失败，请重试。",
     presetImportFailed: "预设导入失败：文件可能已损坏，或不是本工具导出的预设包。",
     confirm: "确认",
     step1: "嘴型设置",
     step2: "UST/音频/背景图",
-    step3: "监视器与导出",
+    step3: "预览与导出",
     uploadUst: "导入 .ust 文件",
     uploadUstDesc: "生成时间轴",
     uploadAudio: "导入音频 (可选)",
@@ -185,14 +185,14 @@ const i18n = {
     noticeUsageTitle: "Basic Usage Notes",
     noticeUpdatesTitle: "Changelog",
     noticeUsage: "Designed for Japanese USTs, but any type of UST will work. USTs in other languages can theoretically be used, but mouth shapes must be uploaded one by one using the single-character override feature. You will need to ignore the five basic vowel settings.\nDue to performance limitations, using this tool on mobile browsers is highly not recommended.\nYou can find various publicly distributed UST files on sites like BowlRoll. Please note that when publishing content made using someone else's UST, you must credit the original author.\nIf you have any questions or feedback, feel free to contact me -> \nemail: riciwaaaa@gmail.com",
-    noticeUpdates: "26/6/25 Update: Huge thanks to ink for contributing the ust online search feature!\n26/4/19 Update: Now supports importing .ustx and .vsqx files! We've also made a few UI improvements.\n26/3/22 Update: You can now enter fullscreen mode to record your screen directly. If exporting fails on mobile, you can try this method.",
+    noticeUpdates: "26/7/24 Update: Added preset export/import. The label in the top-right corner of the preview window can now be clicked to hide. Export failures should also be a bit less common now, in theory.\n26/6/25 Update: Huge thanks to ink for contributing the ust online search feature!\n26/6/14 Update: Added a pop-out window feature.\n26/4/19 Update: Now supports importing .ustx and .vsqx files! We've also made a few UI improvements.\n26/3/22 Update: You can now enter fullscreen mode to record your screen directly. If exporting fails on mobile, you can try this method.",
     buyMeACoffee: "☕ Buy me a coffee",
     coffeePending: "(image coming soon)",
     labelClickToHide: "Click to hide",
     labelClickToShow: "Click to show",
     exportPreset: "Export Preset",
     importPreset: "Import Preset",
-    presetEmpty: "No mouth images uploaded yet — nothing to export.",
+    presetEmpty: "Nothing to export yet — add a mouth image or a background first.",
     presetExportFailed: "Failed to export preset. Please try again.",
     presetImportFailed: "Failed to import preset: the file may be corrupted or was not exported by this tool.",
     confirm: "Confirm",
@@ -286,14 +286,14 @@ const i18n = {
     noticeUsageTitle: "基本的な使い方",
     noticeUpdatesTitle: "更新履歴",
     noticeUsage: "日本語のUST向けに作られていますが、どの種類のUSTでも使用可能です。他言語のUSTも理論上は使用できますが、口の形は「単字特例（個別の文字の上書き）」機能を使って一つずつアップロードする必要があります。その場合、基本設定の5つの母音は無視してください。\nパフォーマンスの制限により、スマートフォンなどのモバイルブラウザでの使用は推奨していません（PC環境を推奨します）。\nBowlRollなどのサイトで、公開・配布されている様々なUSTファイルを見つけることができます。他の方が作成したUSTを使用して動画などの制作物を公開する際は、必ず原作者のクレジット（お名前）を表記してください。\nご質問や不具合の報告があれば、こちらまでご連絡ください -> \nemail: riciwaaaa@gmail.com",
-    noticeUpdates: "26/6/25 アップデート: ustオンライン検索機能を提供してくださったinkさんに、心より感謝いたします！\n26/4/19 アップデート: 新たに .ustx および .vsqx ファイルのインポートに対応しました！また、UIも少し使いやすく改善しています。\n26/3/22 アップデート: フルスクリーンモードに入って直接画面録画ができるようになりました。モバイル端末でエクスポートに失敗する場合は、この方法をお試しください。",
+    noticeUpdates: "26/7/24 アップデート: プリセットの書き出し・読み込み機能を追加しました。プレビュー画面右上のラベル表示はクリックで非表示にできるようになりました。理論上、エクスポート失敗も少し減っているはずです。\n26/6/25 アップデート: ustオンライン検索機能を提供してくださったinkさんに、心より感謝いたします！\n26/6/14 アップデート: ポップアウトウィンドウ機能を追加しました。\n26/4/19 アップデート: 新たに .ustx および .vsqx ファイルのインポートに対応しました！また、UIも少し使いやすく改善しています。\n26/3/22 アップデート: フルスクリーンモードに入って直接画面録画ができるようになりました。モバイル端末でエクスポートに失敗する場合は、この方法をお試しください。",
     buyMeACoffee: "☕ コーヒーをおごる",
     coffeePending: "（画像は準備中）",
     labelClickToHide: "クリックで非表示",
     labelClickToShow: "クリックで表示",
     exportPreset: "プリセット書き出し",
     importPreset: "プリセット読み込み",
-    presetEmpty: "口の形の画像が未設定のため、書き出せません。",
+    presetEmpty: "口の形の画像や背景が未設定のため、書き出せません。",
     presetExportFailed: "プリセットの書き出しに失敗しました。もう一度お試しください。",
     presetImportFailed: "プリセットの読み込みに失敗しました。ファイルが破損しているか、このツールで書き出したものではない可能性があります。",
     confirm: "確認",
@@ -483,7 +483,7 @@ const isWebpFile = (file: File) => file.type === 'image/webp' || file.name.toLow
 // TODO(riciwaaaa): 图片上传后填写路径。把图片放进项目根目录的 public/ 文件夹(没有就新建),
 // 然后填 '/文件名'。例如 public/logo.png → '/logo.png'。留空时按钮回退为默认图标/占位文案。
 const NOTICE_LOGO_SRC = '';          // 「使用须知」按钮的 logo 图片
-const BUY_ME_A_COFFEE_IMG_SRC = '';  // 「Buy me a coffee」点开展示的图片
+const BUY_ME_A_COFFEE_IMG_SRC = '/coffee.jpg';  // 「Buy me a coffee」点开展示的图片
 
 // 嘴型预设 zip 里图片的扩展名 ↔ MIME 映射与魔数嗅探(拖拽来源的文件 type 可能为空)
 const IMAGE_EXT_MIME: Record<string, string> = {
@@ -660,7 +660,7 @@ export default function App() {
   const hintTimeoutRef = useRef<number | null>(null);
   const [isPoppedOut, setIsPoppedOut] = useState(false);
   const pipVideoRef = useRef<HTMLVideoElement | null>(null);
-  // 监视器右上角信息标签：点击隐藏；隐藏后悬停原位置仍会半透明浮现，再点即恢复
+  // 预览窗口右上角信息标签：点击隐藏；隐藏后悬停原位置仍会半透明浮现，再点即恢复
   const [isMonitorLabelHidden, setIsMonitorLabelHidden] = useState(false);
 
   const [canvasSize, setCanvasSize] = useState({ width: 512, height: 512 });
@@ -2453,23 +2453,74 @@ export default function App() {
     drawCanvas(currentMouth, currentTime, currentNote ? currentNote.lyric : '');
   };
 
-  const handleBackgroundColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const color = e.target.value;
+  // 设为纯色背景：清空图片/GIF 背景（二者互斥），供颜色选择器与预设导入共用
+  const applyBackgroundColor = (color: string) => {
     setBackgroundColor(color);
     backgroundColorRef.current = color;
-    
-    // Clear image/gif
-    if (bgImageUrl) {
-      revokeTrackedURL(bgImageUrl);
-    }
+
+    if (bgImageUrl) revokeTrackedURL(bgImageUrl);
     setBgImageUrl('');
     bgImageElementRef.current = null;
     setBgGifFrames(null);
     bgGifFramesRef.current = null;
-    
-    // Redraw
+
     const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTimeMs && currentTime < n.startTimeMs + n.durationMs);
     drawCanvas(currentMouth, currentTime, currentNote ? currentNote.lyric : '');
+  };
+
+  const handleBackgroundColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    applyBackgroundColor(e.target.value);
+  };
+
+  // 载入背景图/GIF/动画 webp：文件输入框、拖拽区域、预设导入共用这一份逻辑
+  const loadBackgroundFile = async (file: File): Promise<void> => {
+    setBackgroundColor(null);
+    backgroundColorRef.current = null;
+
+    let frames: GifFrame[] | null = null;
+    try {
+      frames = await parseAnimatedFrames(file, 1280);
+    } catch (err) {
+      console.error("Failed to parse animated background, falling back to static:", err);
+    }
+
+    if (frames) {
+      bgGifFramesRef.current = frames;
+      setBgGifFrames(frames);
+      setBgImageUrl(prev => {
+        if (prev) revokeTrackedURL(prev);
+        return createTrackedURL(file);
+      });
+      bgImageElementRef.current = null;
+      const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTimeMs && currentTime < n.startTimeMs + n.durationMs);
+      drawCanvas(currentMouth, currentTime, currentNote ? currentNote.lyric : '');
+      return;
+    }
+
+    const url = createTrackedURL(file);
+    await new Promise<void>((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        bgImageElementRef.current = img;
+        bgGifFramesRef.current = null;
+        setBgGifFrames(null);
+        setBgImageUrl(prev => {
+          if (prev) revokeTrackedURL(prev);
+          return url;
+        });
+        const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTimeMs && currentTime < n.startTimeMs + n.durationMs);
+        drawCanvas(currentMouth, currentTime, currentNote ? currentNote.lyric : '');
+        resolve();
+      };
+      // 解码失败时也要 resolve：否则 handleImportPreset 里的 await 会永远挂起，
+      // 导致预设导入按钮卡死在 busy 状态
+      img.onerror = () => {
+        console.error('Failed to decode background image:', file.name);
+        revokeTrackedURL(url);
+        resolve();
+      };
+      img.src = url;
+    });
   };
 
   // ------------------------------------------------------------------------
@@ -2481,7 +2532,7 @@ export default function App() {
     const shapes = (Object.keys(mouthImages) as MouthShape[]).filter(s => mouthImages[s]);
     const lyrics = Object.keys(overrideImages).filter(l => overrideImages[l]);
 
-    if (shapes.length === 0 && lyrics.length === 0) {
+    if (shapes.length === 0 && lyrics.length === 0 && !bgImageUrl && !backgroundColor) {
       alert(t.presetEmpty);
       return;
     }
@@ -2492,6 +2543,7 @@ export default function App() {
       const manifest: {
         version: number; generator: string;
         mouths: Record<string, string>; overrides: Record<string, string>;
+        background?: { type: 'color'; color: string } | { type: 'image'; file: string };
       } = { version: 1, generator: 'ust-lip-sync-generator', mouths: {}, overrides: {} };
 
       const grab = async (url: string) => {
@@ -2514,6 +2566,16 @@ export default function App() {
         const name = `overrides/${i}.${ext}`;
         files[name] = bytes;
         manifest.overrides[lyrics[i]] = name;
+      }
+
+      // 背景层：纯色与图片/GIF/动画 webp 二者互斥，跟应用内的状态一致
+      if (backgroundColor) {
+        manifest.background = { type: 'color', color: backgroundColor };
+      } else if (bgImageUrl) {
+        const { bytes, ext } = await grab(bgImageUrl);
+        const name = `background/bg.${ext}`;
+        files[name] = bytes;
+        manifest.background = { type: 'image', file: name };
       }
 
       files['manifest.json'] = strToU8(JSON.stringify(manifest, null, 2));
@@ -2564,6 +2626,13 @@ export default function App() {
       for (const [lyric, path] of Object.entries(manifest.overrides || {})) {
         const f = toFile(path as string);
         if (f) await handleOverrideImageUpload(lyric, f);
+      }
+
+      if (manifest.background?.type === 'color' && manifest.background.color) {
+        applyBackgroundColor(manifest.background.color);
+      } else if (manifest.background?.type === 'image' && manifest.background.file) {
+        const f = toFile(manifest.background.file);
+        if (f) await loadBackgroundFile(f);
       }
     } catch (err) {
       console.error('Preset import failed:', err);
@@ -2664,43 +2733,7 @@ export default function App() {
   const handleBgImageUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    setBackgroundColor(null);
-    backgroundColorRef.current = null;
-
-    let frames: GifFrame[] | null = null;
-    try {
-      frames = await parseAnimatedFrames(file, 1280);
-    } catch (err) {
-      console.error("Failed to parse animated background, falling back to static:", err);
-    }
-
-    if (frames) {
-      bgGifFramesRef.current = frames;
-      setBgGifFrames(frames);
-      setBgImageUrl(prev => {
-        if (prev) revokeTrackedURL(prev);
-        return createTrackedURL(file);
-      }); // Just for UI display
-      bgImageElementRef.current = null; // Clear static image
-      const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTimeMs && currentTime < n.startTimeMs + n.durationMs);
-      drawCanvas(currentMouth, currentTime, currentNote ? currentNote.lyric : '');
-    } else {
-      const url = createTrackedURL(file);
-      const img = new Image();
-      img.onload = () => {
-        bgImageElementRef.current = img;
-        bgGifFramesRef.current = null;
-        setBgGifFrames(null);
-        setBgImageUrl(prev => {
-          if (prev) revokeTrackedURL(prev);
-          return url;
-        });
-        const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTimeMs && currentTime < n.startTimeMs + n.durationMs);
-        drawCanvas(currentMouth, currentTime, currentNote ? currentNote.lyric : '');
-      };
-      img.src = url;
-    }
+    await loadBackgroundFile(file);
   };
 
   return (
@@ -2758,29 +2791,6 @@ export default function App() {
 
       {/* Mobile Absolute Language & Theme Buttons */}
       <div className="fixed top-4 right-4 z-50 portrait:flex landscape:hidden flex-col items-end space-y-3">
-        <button 
-          onClick={toggleDarkMode} 
-          className="p-2 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm shadow-md border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-full transition-all"
-          title={isDarkMode ? "Light Mode" : "Dark Mode"}
-        >
-          {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-        </button>
-        <a 
-          href="https://github.com/Riciwaaaa/UST-lip-sync-generator" 
-          target="_blank" 
-          rel="noopener noreferrer"
-          className="p-2 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm shadow-md border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-full transition-all"
-          title="GitHub Repository"
-        >
-          <Github className="w-5 h-5" />
-        </a>
-        <button
-          onClick={cycleLanguage}
-          className="w-9 h-9 flex items-center justify-center bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm shadow-md border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-full transition-all text-xs font-semibold"
-          title={t.language}
-        >
-          {LANGUAGE_LABELS[language]}
-        </button>
         <button
           onClick={() => setShowModal(true)}
           className="w-9 h-9 flex items-center justify-center overflow-hidden bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm shadow-md border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-full transition-all"
@@ -2789,6 +2799,29 @@ export default function App() {
           {NOTICE_LOGO_SRC
             ? <img src={NOTICE_LOGO_SRC} alt={t.notice} className="w-full h-full object-cover" />
             : <Info className="w-5 h-5" />}
+        </button>
+        <a
+          href="https://github.com/Riciwaaaa/UST-lip-sync-generator"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="p-2 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm shadow-md border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-full transition-all"
+          title="GitHub Repository"
+        >
+          <Github className="w-5 h-5" />
+        </a>
+        <button
+          onClick={toggleDarkMode}
+          className="p-2 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm shadow-md border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-full transition-all"
+          title={isDarkMode ? "Light Mode" : "Dark Mode"}
+        >
+          {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+        </button>
+        <button
+          onClick={cycleLanguage}
+          className="w-9 h-9 flex items-center justify-center bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm shadow-md border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-full transition-all text-xs font-semibold"
+          title={t.language}
+        >
+          {LANGUAGE_LABELS[language]}
         </button>
       </div>
 
@@ -2800,30 +2833,6 @@ export default function App() {
             <span className="font-semibold text-zinc-900 dark:text-zinc-100">{t.title}</span>
           </div>
           <div className="flex items-center space-x-4">
-            <button 
-              onClick={toggleDarkMode} 
-              className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 rounded-full transition-all"
-              title={isDarkMode ? "Light Mode" : "Dark Mode"}
-            >
-              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </button>
-            <a 
-              href="https://github.com/Riciwaaaa/UST-lip-sync-generator" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 rounded-full transition-all"
-              title="GitHub Repository"
-            >
-              <Github className="w-5 h-5" />
-            </a>
-            <button
-              onClick={cycleLanguage}
-              className="flex items-center gap-1.5 px-3 h-9 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 rounded-full transition-all"
-              title={t.language}
-            >
-              <Globe className="w-4 h-4" />
-              <span className="text-sm font-semibold">{LANGUAGE_LABELS[language]}</span>
-            </button>
             <button
               onClick={() => setShowModal(true)}
               className="w-9 h-9 flex items-center justify-center overflow-hidden text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 rounded-full transition-all"
@@ -2832,6 +2841,30 @@ export default function App() {
               {NOTICE_LOGO_SRC
                 ? <img src={NOTICE_LOGO_SRC} alt={t.notice} className="w-full h-full object-cover rounded-full" />
                 : <Info className="w-5 h-5" />}
+            </button>
+            <a
+              href="https://github.com/Riciwaaaa/UST-lip-sync-generator"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 rounded-full transition-all"
+              title="GitHub Repository"
+            >
+              <Github className="w-5 h-5" />
+            </a>
+            <button
+              onClick={toggleDarkMode}
+              className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 rounded-full transition-all"
+              title={isDarkMode ? "Light Mode" : "Dark Mode"}
+            >
+              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
+            <button
+              onClick={cycleLanguage}
+              className="flex items-center gap-1.5 px-3 h-9 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 rounded-full transition-all"
+              title={t.language}
+            >
+              <Globe className="w-4 h-4" />
+              <span className="text-sm font-semibold">{LANGUAGE_LABELS[language]}</span>
             </button>
           </div>
         </div>
@@ -3223,42 +3256,7 @@ export default function App() {
 
             {/* Background Upload */}
             <DragDropWrapper
-              onDropFile={async (file) => {
-                setBackgroundColor(null);
-                backgroundColorRef.current = null;
-                let frames: GifFrame[] | null = null;
-                try {
-                  frames = await parseAnimatedFrames(file, 1280);
-                } catch (err) {
-                  console.error('Failed to parse animated background, falling back to static:', err);
-                }
-                if (frames) {
-                  bgGifFramesRef.current = frames;
-                  setBgGifFrames(frames);
-                  setBgImageUrl(prev => {
-                    if (prev) revokeTrackedURL(prev);
-                    return createTrackedURL(file);
-                  });
-                  bgImageElementRef.current = null;
-                  const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTimeMs && currentTime < n.startTimeMs + n.durationMs);
-                  drawCanvas(currentMouth, currentTime, currentNote ? currentNote.lyric : '');
-                } else {
-                  const url = createTrackedURL(file);
-                  const img = new Image();
-                  img.onload = () => {
-                    bgImageElementRef.current = img;
-                    bgGifFramesRef.current = null;
-                    setBgGifFrames(null);
-                    setBgImageUrl(prev => {
-                      if (prev) revokeTrackedURL(prev);
-                      return url;
-                    });
-                    const currentNote = parsedDataRef.current?.notes.find(n => currentTime >= n.startTimeMs && currentTime < n.startTimeMs + n.durationMs);
-                    drawCanvas(currentMouth, currentTime, currentNote ? currentNote.lyric : '');
-                  };
-                  img.src = url;
-                }
-              }}
+              onDropFile={loadBackgroundFile}
               accept="image/*"
               className={(isDragging) => `
                 relative group cursor-pointer flex flex-col items-center justify-center 
