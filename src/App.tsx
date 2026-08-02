@@ -103,6 +103,7 @@ const i18n = {
     uploadAudio: "导入音频 (可选)",
     audioUploaded: "已导入音频",
     uploadAudioDesc: "同步播放与导出",
+    audioPlayFailed: "浏览器无法播放该音频（编码不受支持或文件损坏）。预览将静音继续播放，导出时仍会尝试混入该音频。",
     uploadBg: "导入背景图/视频 (可选)",
     bgUploaded: "已导入背景",
     solidBg: "纯色背景",
@@ -204,6 +205,7 @@ const i18n = {
     uploadAudio: "Import Audio (Optional)",
     audioUploaded: "Audio Imported",
     uploadAudioDesc: "Sync playback & export",
+    audioPlayFailed: "This browser cannot play the audio file (unsupported codec or corrupt file). Preview keeps playing without sound; export will still try to mux it in.",
     uploadBg: "Import Background (Optional)",
     bgUploaded: "Background Imported",
     solidBg: "Solid Background",
@@ -305,6 +307,7 @@ const i18n = {
     uploadAudio: "音声をインポート (任意)",
     audioUploaded: "音声インポート済み",
     uploadAudioDesc: "同期再生と出力",
+    audioPlayFailed: "この音声はブラウザで再生できません（未対応のコーデックまたは破損）。プレビューは無音で続行し、書き出し時には音声の合成を試みます。",
     uploadBg: "背景をインポート (任意)",
     bgUploaded: "背景インポート済み",
     solidBg: "単色背景",
@@ -683,6 +686,9 @@ export default function App() {
   // 新增：音频、背景、FFmpeg 导出状态
   const [audioUrl, setAudioUrl] = useState<string>('');
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // 浏览器无法解码该音频时置位：播放时钟退回墙钟，否则 audio.currentTime 恒为 0，画面卡死
+  const audioBrokenRef = useRef(false);
+  const [audioError, setAudioError] = useState('');
   const [bgImageUrl, setBgImageUrl] = useState<string>('');
   const bgImageElementRef = useRef<HTMLImageElement | null>(null);
   
@@ -1171,13 +1177,22 @@ export default function App() {
     return () => cancelAnimationFrame(rafId);
   }, [canvasSize, currentMouth, isPlaying, currentTime, mouthImages, overrideImages, parsedData, bgImageUrl, bgGifFrames, backgroundColor]);
 
+  // 标记音频不可播放：预览改用墙钟推进并提示用户（文件本身仍会交给 ffmpeg 导出）
+  const markAudioBroken = () => {
+    if (audioBrokenRef.current) return;
+    audioBrokenRef.current = true;
+    setAudioError(i18n[languageRef.current].audioPlayFailed);
+  };
+
   const updateFrame = () => {
     const data = parsedDataRef.current;
     if (!data || !isPlayingRef.current) return;
 
     let newTime = 0;
-    if (audioRef.current && audioUrl) {
+    if (audioRef.current && audioUrl && !audioBrokenRef.current) {
       newTime = audioRef.current.currentTime * 1000;
+      // 每帧用音频时间重锚墙钟：音频中途失效时可从当前位置无缝接管，不会跳帧
+      startTimeMsRef.current = performance.now() - newTime;
     } else {
       const now = performance.now();
       newTime = now - startTimeMsRef.current;
@@ -1248,14 +1263,24 @@ export default function App() {
     } else {
       setIsPlaying(true);
       isPlayingRef.current = true;
-      
+
+      // 墙钟锚点无条件设置：音频不可用时 updateFrame 立即据此推进画面
+      startTimeMsRef.current = performance.now() - currentTime;
+
       if (audioRef.current && audioUrl) {
-        audioRef.current.currentTime = currentTime / 1000;
-        audioRef.current.play().catch(e => console.error("Audio play failed:", e));
-      } else {
-        startTimeMsRef.current = performance.now() - currentTime;
+        // 音源已解码失败(error 已置位)时不必再试，直接走墙钟
+        if (audioRef.current.error) {
+          markAudioBroken();
+        } else {
+          audioRef.current.currentTime = currentTime / 1000;
+          audioRef.current.play().catch(e => {
+            console.error("Audio play failed:", e);
+            markAudioBroken();
+            startTimeMsRef.current = performance.now() - currentTime;
+          });
+        }
       }
-      
+
       if (reqRef.current) cancelAnimationFrame(reqRef.current);
       reqRef.current = requestAnimationFrame(updateFrame);
     }
@@ -1394,7 +1419,8 @@ export default function App() {
     }
     
     if (isPlayingRef.current) {
-      if (!audioUrl) {
+      // 由墙钟驱动时(无音频 / 音频不可播放)需重锚，否则播放头会弹回原位置
+      if (!audioUrl || audioBrokenRef.current) {
         startTimeMsRef.current = performance.now() - time;
       }
     } else {
@@ -1787,7 +1813,11 @@ export default function App() {
       isPlayingRef.current = true;
       startTimeMsRef.current = performance.now();
       if (audioRef.current && audioUrl) {
-        audioRef.current.play().catch(console.error);
+        audioRef.current.play().catch(e => {
+          console.error("Audio play failed:", e);
+          markAudioBroken();
+          startTimeMsRef.current = performance.now();
+        });
       }
       if (reqRef.current) cancelAnimationFrame(reqRef.current);
       reqRef.current = requestAnimationFrame(updateFrame);
@@ -1818,7 +1848,7 @@ export default function App() {
           // 墙钟兜底
           if (elapsed >= hardStopMs) { finish(); return; }
           // currentTime state is stale inside this closure; derive elapsed time from refs instead
-          const current = audioRef.current
+          const current = audioRef.current && !audioBrokenRef.current
             ? audioRef.current.currentTime * 1000
             : performance.now() - startTimeMsRef.current;
           const progress = Math.min(100, Math.round((current / durationToRecord) * 100));
@@ -2428,7 +2458,9 @@ export default function App() {
     }
     setAudioUrl('');
     audioFileRef.current = null;
-    
+    audioBrokenRef.current = false;
+    setAudioError('');
+
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
@@ -2718,16 +2750,21 @@ export default function App() {
     }
   };
 
+  const loadAudioFile = (file: File) => {
+    audioFileRef.current = file;
+    // 换音频后重置"不可播放"状态，等新音源自己的 error/canplay 事件重新判定
+    audioBrokenRef.current = false;
+    setAudioError('');
+    const url = createTrackedURL(file);
+    setAudioUrl(prev => {
+      if (prev) revokeTrackedURL(prev);
+      return url;
+    });
+  };
+
   const handleAudioUpload = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      audioFileRef.current = file;
-      const url = createTrackedURL(file);
-      setAudioUrl(prev => {
-        if (prev) revokeTrackedURL(prev);
-        return url;
-      });
-    }
+    if (file) loadAudioFile(file);
   };
 
   const handleBgImageUpload = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -3207,14 +3244,7 @@ export default function App() {
 
             {/* Audio Upload */}
             <DragDropWrapper
-              onDropFile={(file) => {
-                audioFileRef.current = file;
-                const url = createTrackedURL(file);
-                setAudioUrl(prev => {
-                  if (prev) revokeTrackedURL(prev);
-                  return url;
-                });
-              }}
+              onDropFile={loadAudioFile}
               accept="audio/*,.mp3,.wav,.ogg,.flac,.aac,.m4a,.mp4,.webm,.mov"
               className={(isDragging) => `
                 relative group cursor-pointer flex flex-col items-center justify-center 
@@ -3240,7 +3270,15 @@ export default function App() {
                       <p className="portrait:text-xs landscape:text-sm text-zinc-500 dark:text-zinc-400">{t.uploadAudioDesc}</p>
                     </div>
                   </div>
-                  {audioUrl && <audio ref={audioRef} src={audioUrl} className="hidden" />}
+                  {audioUrl && (
+                    <audio
+                      ref={audioRef}
+                      src={audioUrl}
+                      className="hidden"
+                      onError={markAudioBroken}
+                      onCanPlay={() => { audioBrokenRef.current = false; setAudioError(''); }}
+                    />
+                  )}
                   {audioUrl && (
                     <button
                       onClick={handleClearAudio}
@@ -3253,6 +3291,13 @@ export default function App() {
                 </>
               )}
             </DragDropWrapper>
+
+            {audioError && (
+              <div className="flex items-start space-x-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <p className="text-xs font-medium">{audioError}</p>
+              </div>
+            )}
 
             {/* Background Upload */}
             <DragDropWrapper
