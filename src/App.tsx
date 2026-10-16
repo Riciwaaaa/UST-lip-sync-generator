@@ -11,58 +11,8 @@ import yaml from 'js-yaml';
 import { DragDropWrapper } from './components/DragDropWrapper';
 import { UstSearchModal } from './components/UstSearchModal';
 import { decodeProjectBytes } from './lib/decodeProject';
-
-interface NoteData {
-  index: number;
-  originalLyric: string;
-  lyric: string;
-  length: number;
-  startTimeMs: number;
-  durationMs: number;
-}
-
-interface ParsedUst {
-  tempo: number;
-  notes: NoteData[];
-}
-
-type MouthShape = 'a' | 'i' | 'u' | 'e' | 'o' | 'default';
-
-const TICKS_PER_BEAT = 480;
-
-const getMouthShape = (lyric: string): MouthShape => {
-  if (!lyric) return 'default';
-  const cleanLyric = lyric.trim().toLowerCase();
-  
-  if (cleanLyric === 'r' || cleanLyric === '息') return 'default';
-
-  const lastChar = cleanLyric.slice(-1);
-  if (['a', 'i', 'u', 'e', 'o'].includes(lastChar)) {
-    return lastChar as MouthShape;
-  }
-
-  const kanaMap: Record<string, MouthShape> = {
-    // hiragana
-    'あ':'a', 'か':'a', 'さ':'a', 'た':'a', 'な':'a', 'は':'a', 'ま':'a', 'や':'a', 'ら':'a', 'わ':'a', 'が':'a', 'ざ':'a', 'だ':'a', 'ば':'a', 'ぱ':'a', 'ぁ':'a', 'ゃ':'a',
-    'い':'i', 'き':'i', 'し':'i', 'ち':'i', 'に':'i', 'ひ':'i', 'み':'i', 'り':'i', 'ぎ':'i', 'じ':'i', 'ぢ':'i', 'び':'i', 'ぴ':'i', 'ぃ':'i',
-    'う':'u', 'く':'u', 'す':'u', 'つ':'u', 'ぬ':'u', 'ふ':'u', 'む':'u', 'ゆ':'u', 'る':'u', 'ぐ':'u', 'ず':'u', 'づ':'u', 'ぶ':'u', 'ぷ':'u', 'ぅ':'u', 'ゅ':'u',
-    'え':'e', 'け':'e', 'せ':'e', 'て':'e', 'ね':'e', 'へ':'e', 'め':'e', 'れ':'e', 'げ':'e', 'ぜ':'e', 'で':'e', 'べ':'e', 'ぺ':'e', 'ぇ':'e',
-    'お':'o', 'こ':'o', 'そ':'o', 'と':'o', 'の':'o', 'ほ':'o', 'も':'o', 'よ':'o', 'ろ':'o', 'を':'o', 'ご':'o', 'ぞ':'o', 'ど':'o', 'ぼ':'o', 'ぽ':'o', 'ぉ':'o', 'ょ':'o',
-    // katakana (mirrors hiragana row-for-row; VSQX/VOCALOID commonly uses katakana)
-    'ア':'a', 'カ':'a', 'サ':'a', 'タ':'a', 'ナ':'a', 'ハ':'a', 'マ':'a', 'ヤ':'a', 'ラ':'a', 'ワ':'a', 'ガ':'a', 'ザ':'a', 'ダ':'a', 'バ':'a', 'パ':'a', 'ァ':'a', 'ャ':'a',
-    'イ':'i', 'キ':'i', 'シ':'i', 'チ':'i', 'ニ':'i', 'ヒ':'i', 'ミ':'i', 'リ':'i', 'ギ':'i', 'ジ':'i', 'ヂ':'i', 'ビ':'i', 'ピ':'i', 'ィ':'i',
-    'ウ':'u', 'ク':'u', 'ス':'u', 'ツ':'u', 'ヌ':'u', 'フ':'u', 'ム':'u', 'ユ':'u', 'ル':'u', 'グ':'u', 'ズ':'u', 'ヅ':'u', 'ブ':'u', 'プ':'u', 'ゥ':'u', 'ュ':'u', 'ヴ':'u',
-    'エ':'e', 'ケ':'e', 'セ':'e', 'テ':'e', 'ネ':'e', 'ヘ':'e', 'メ':'e', 'レ':'e', 'ゲ':'e', 'ゼ':'e', 'デ':'e', 'ベ':'e', 'ペ':'e', 'ェ':'e',
-    'オ':'o', 'コ':'o', 'ソ':'o', 'ト':'o', 'ノ':'o', 'ホ':'o', 'モ':'o', 'ヨ':'o', 'ロ':'o', 'ヲ':'o', 'ゴ':'o', 'ゾ':'o', 'ド':'o', 'ボ':'o', 'ポ':'o', 'ォ':'o', 'ョ':'o',
-  };
-
-  for (let i = cleanLyric.length - 1; i >= 0; i--) {
-    const c = cleanLyric[i];
-    if (kanaMap[c]) return kanaMap[c];
-  }
-
-  return 'default';
-};
+import { type NoteData, type ParsedUst, type MouthShape, TICKS_PER_BEAT, getMouthShape, isRestLyric, newNoteId, noteEnd, getTimelineEndMs, findActiveNote, collectUniqueLyrics } from './lib/notes';
+import { NoteTimeline } from './components/NoteTimeline';
 
 const formatTime = (ms: number) => {
   const totalSeconds = Math.floor(ms / 1000);
@@ -152,13 +102,6 @@ const i18n = {
     invalidUst: "请上传有效的 .ust, .ustx 或 .vsqx 文件",
     selectTrack: "选择要导入的轨道",
     selectTrackDesc: "检测到工程中包含多条轨道，请选择要导入的主轨道：",
-    parsedData: "解析数据 ({count} notes)",
-    index: "序号",
-    originalLyric: "原始歌词",
-    lyric: "歌词",
-    mappedMouth: "口型映射",
-    startTimeMsFormatted: "开始时间",
-    startTimeMsRaw: "开始时间 (ms)",
     webmDesc: "WebM (支持透明)",
     mp4Desc: "MP4 (H.264)",
     movDesc: "MOV (H.264)",
@@ -254,13 +197,6 @@ const i18n = {
     invalidUst: "Please upload a valid .ust, .ustx or .vsqx file",
     selectTrack: "Select Track to Import",
     selectTrackDesc: "Multiple tracks detected. Please select the main track to import:",
-    parsedData: "Parsed Data ({count} notes)",
-    index: "Index",
-    originalLyric: "Original Lyric",
-    lyric: "Lyric",
-    mappedMouth: "Mapped Mouth",
-    startTimeMsFormatted: "Start Time",
-    startTimeMsRaw: "Start Time (ms)",
     webmDesc: "WebM (Supports Transparency)",
     mp4Desc: "MP4 (H.264)",
     movDesc: "MOV (H.264)",
@@ -356,13 +292,6 @@ const i18n = {
     invalidUst: "有効な .ust, .ustx または .vsqx ファイルをアップロードしてください",
     selectTrack: "インポートするトラックを選択",
     selectTrackDesc: "複数のトラックが検出されました。インポートするメイントラックを選択してください：",
-    parsedData: "解析データ ({count} notes)",
-    index: "番号",
-    originalLyric: "元の歌詞",
-    lyric: "歌詞",
-    mappedMouth: "割り当てられた口の形",
-    startTimeMsFormatted: "開始時間",
-    startTimeMsRaw: "開始時間 (ms)",
     webmDesc: "WebM (透過対応)",
     mp4Desc: "MP4 (H.264)",
     movDesc: "MOV (H.264)",
@@ -638,6 +567,8 @@ export default function App() {
 
   const [parsedData, setParsedData] = useState<ParsedUst | null>(null);
   const parsedDataRef = useRef<ParsedUst | null>(null);
+  // 每载入一个新工程就 +1，作为时间轴编辑器的 key
+  const [notesLoadId, setNotesLoadId] = useState(0);
   const [fileName, setFileName] = useState<string>('');
   const [error, setError] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1200,8 +1131,7 @@ export default function App() {
     
     if (newTime < 0) newTime = 0;
     
-    const lastNote = data.notes[data.notes.length - 1];
-    const totalDuration = lastNote ? lastNote.startTimeMs + lastNote.durationMs : 0;
+    const totalDuration = getTimelineEndMs(data);
 
     if (newTime >= totalDuration && totalDuration > 0) {
       setIsPlaying(false);
@@ -1225,22 +1155,7 @@ export default function App() {
     // Add safety limit
     if (visualTime < 0) visualTime = 0;
 
-    let activeNote: NoteData | null = null;
-    
-    // Linear scan to inherently support overlapping notes
-    for (let i = data.notes.length - 1; i >= 0; i--) {
-      const note = data.notes[i];
-      if (visualTime >= note.startTimeMs && visualTime < note.startTimeMs + note.durationMs) {
-        // Handle slurs: if lyric is '+', we inherit from the previous valid note
-        let searchIdx = i;
-        while (searchIdx >= 0 && (data.notes[searchIdx].lyric === '+' || data.notes[searchIdx].lyric === '-')) {
-           searchIdx--;
-        }
-        activeNote = searchIdx >= 0 ? data.notes[searchIdx] : note;
-        break;
-      }
-    }
-
+    const activeNote = findActiveNote(data.notes, visualTime);
     const mouth = activeNote ? getMouthShape(activeNote.lyric) : 'default';
     const lyric = activeNote ? activeNote.lyric : '';
     setCurrentMouth(mouth);
@@ -1410,45 +1325,39 @@ export default function App() {
     }
   };
 
-  const handleSeek = (e: ChangeEvent<HTMLInputElement>) => {
-    const time = parseFloat(e.target.value);
+  // 暂停状态下按给定(音频轴)时间重算口型并重绘：定位与编辑音符后共用
+  const redrawStaticAt = (time: number) => {
+    const data = parsedDataRef.current;
+    if (!data) {
+      drawCanvas(currentMouth, time, '');
+      return;
+    }
+    const visualTime = time - (audioOffsetRef.current * 1000);
+    const activeNote = findActiveNote(data.notes, visualTime);
+    const mouth = activeNote ? getMouthShape(activeNote.lyric) : 'default';
+    setCurrentMouth(mouth);
+    drawCanvas(mouth, visualTime, activeNote ? activeNote.lyric : '');
+  };
+
+  const seekTo = (rawTime: number) => {
+    const time = Math.min(Math.max(0, rawTime), getTimelineEndMs(parsedDataRef.current));
     setCurrentTime(time);
-    
+
     if (audioRef.current && audioUrl) {
       audioRef.current.currentTime = time / 1000;
     }
-    
+
     if (isPlayingRef.current) {
       // 由墙钟驱动时(无音频 / 音频不可播放)需重锚，否则播放头会弹回原位置
       if (!audioUrl || audioBrokenRef.current) {
         startTimeMsRef.current = performance.now() - time;
       }
     } else {
-      // 静态更新画布
-      const data = parsedDataRef.current;
-      if (data) {
-        const visualTime = time - (audioOffsetRef.current * 1000);
-        let activeNote: NoteData | null = null;
-        for (let i = data.notes.length - 1; i >= 0; i--) {
-          const note = data.notes[i];
-          if (visualTime >= note.startTimeMs && visualTime < note.startTimeMs + note.durationMs) {
-            let searchIdx = i;
-            while (searchIdx >= 0 && (data.notes[searchIdx].lyric === '+' || data.notes[searchIdx].lyric === '-')) {
-              searchIdx--;
-            }
-            activeNote = searchIdx >= 0 ? data.notes[searchIdx] : note;
-            break;
-          }
-        }
-        const mouth = activeNote ? getMouthShape(activeNote.lyric) : 'default';
-        const lyric = activeNote ? activeNote.lyric : '';
-        setCurrentMouth(mouth);
-        drawCanvas(mouth, visualTime, lyric);
-      } else {
-        drawCanvas(currentMouth, time, '');
-      }
+      redrawStaticAt(time);
     }
   };
+
+  const handleSeek = (e: ChangeEvent<HTMLInputElement>) => seekTo(parseFloat(e.target.value));
 
   const renderOffline = async () => {
     if (!parsedDataRef.current) return;
@@ -1481,10 +1390,7 @@ export default function App() {
 
     try {
       const ffmpeg = ffmpegRef.current;
-      const totalDuration = parsedDataRef.current.notes.length > 0
-        ? parsedDataRef.current.notes[parsedDataRef.current.notes.length - 1].startTimeMs +
-          parsedDataRef.current.notes[parsedDataRef.current.notes.length - 1].durationMs
-        : 0;
+      const totalDuration = getTimelineEndMs(parsedDataRef.current);
 
       if (totalDuration === 0) throw new Error("No notes to export");
 
@@ -1519,22 +1425,9 @@ export default function App() {
         const timeMs = (i / fps) * 1000;
         let visualTime = timeMs - (audioOffsetRef.current * 1000);
         if (visualTime < 0) visualTime = 0;
-        let mouth: MouthShape = 'default';
-        let lyric = '';
-
-        for (let k = parsedDataRef.current!.notes.length - 1; k >= 0; k--) {
-          const n = parsedDataRef.current!.notes[k];
-          if (visualTime >= n.startTimeMs && visualTime < n.startTimeMs + n.durationMs) {
-            let searchIdx = k;
-            while (searchIdx >= 0 && (parsedDataRef.current!.notes[searchIdx].lyric === '+' || parsedDataRef.current!.notes[searchIdx].lyric === '-')) {
-              searchIdx--;
-            }
-            const activeNote = searchIdx >= 0 ? parsedDataRef.current!.notes[searchIdx] : n;
-            mouth = getMouthShape(activeNote.lyric);
-            lyric = activeNote.lyric;
-            break;
-          }
-        }
+        const activeNote = findActiveNote(parsedDataRef.current!.notes, visualTime);
+        const mouth: MouthShape = activeNote ? getMouthShape(activeNote.lyric) : 'default';
+        const lyric = activeNote ? activeNote.lyric : '';
 
         // 直接以目标分辨率绘制,免去"预览大画布→缩小"的双重渲染,也不再污染预览画面
         if (isTransparent) {
@@ -1745,9 +1638,8 @@ export default function App() {
     }
 
     const data = parsedDataRef.current;
-    if (data && data.notes.length > 0) {
-      const lastNote = data.notes[data.notes.length - 1];
-      const totalDuration = (lastNote.startTimeMs + lastNote.durationMs) / 1000;
+    if (data) {
+      const totalDuration = getTimelineEndMs(data) / 1000;
       if (totalDuration > 300) {
         if (!window.confirm(t.longVideoWarning)) {
           return;
@@ -1801,8 +1693,7 @@ export default function App() {
         if (e.data.size > 0) chunks.push(e.data);
       };
 
-      const lastNote = parsedData.notes[parsedData.notes.length - 1];
-      const totalDurationMs = lastNote ? lastNote.startTimeMs + lastNote.durationMs : 0;
+      const totalDurationMs = getTimelineEndMs(parsedData);
       const durationToRecord = totalDurationMs + 500;
       // 墙钟兜底:仅当"按播放实际结束停止"未触发(极端卡顿)时才生效
       const hardStopMs = durationToRecord + 2000;
@@ -1954,39 +1845,37 @@ export default function App() {
     };
   }, []);
 
-  const recalculateTimings = (notes: NoteData[], tempo: number): NoteData[] => {
-    const msPerTick = 60000 / (tempo * TICKS_PER_BEAT);
-    let currentStartTime = 0;
-    
-    return notes.map(note => {
-      const durationMs = note.length * msPerTick;
-      const res = {
-        ...note,
-        startTimeMs: currentStartTime,
-        durationMs: durationMs
-      };
-      currentStartTime += durationMs;
-      return res;
-    });
+  // 新工程载入：先记下含休止符的总长，再丢弃 R(空白处本就是 default 口型)；
+  // notesLoadId 变化会让时间轴编辑器重新挂载，撤销栈/选中/缩放随之清空
+  const loadParsedData = (rawNotes: NoteData[], tempo: number) => {
+    const sorted = [...rawNotes].sort((a, b) => a.startTimeMs - b.startTimeMs);
+    const endMs = sorted.reduce((end, n) => Math.max(end, noteEnd(n)), 0);
+    const newData: ParsedUst = { tempo, endMs, notes: sorted.filter(n => !isRestLyric(n.lyric)) };
+    parsedDataRef.current = newData;
+    setParsedData(newData);
+    setNotesLoadId(n => n + 1);
+    setUniqueLyrics(collectUniqueLyrics(newData.notes));
+
+    setCurrentTime(0);
+    setCurrentMouth('default');
+    setIsPlaying(false);
+    isPlayingRef.current = false;
+    if (reqRef.current) cancelAnimationFrame(reqRef.current);
+    if (audioRef.current) audioRef.current.pause();
+
+    setShowTrackSelector(false);
   };
 
-  const handleBpmChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newTempo = parseFloat(e.target.value);
-    if (isNaN(newTempo) || newTempo <= 0 || !parsedData) return;
-
-    // Scale timings proportionally instead of sequential reassignment.
-    // recalculateTimings() strips inter-note gaps, which breaks USTX/VSQX files
-    // where rest notes were filtered out and gaps are encoded in startTimeMs.
-    const ratio = parsedData.tempo / newTempo;
-    const updatedNotes = parsedData.notes.map(note => ({
-      ...note,
-      startTimeMs: note.startTimeMs * ratio,
-      durationMs: note.durationMs * ratio,
-    }));
-    const newData = { ...parsedData, tempo: newTempo, notes: updatedNotes };
-
-    setParsedData(newData);
-    parsedDataRef.current = newData;
+  // 时间轴编辑器的所有修改(含改 BPM、撤销)都走这里；暂停时立即按新音符重绘画面
+  const applyParsedData = (next: ParsedUst) => {
+    parsedDataRef.current = next;
+    setParsedData(next);
+    // 歌词集合没变就返回旧数组，拖拽时左栏单字覆盖区不必跟着每帧重渲染
+    setUniqueLyrics(prev => {
+      const list = collectUniqueLyrics(next.notes);
+      return list.length === prev.length && list.every((l, i) => l === prev[i]) ? prev : list;
+    });
+    if (!isPlayingRef.current) redrawStaticAt(currentTime);
   };
 
   const parseUstx = (content: string) => {
@@ -2037,53 +1926,21 @@ export default function App() {
     const partOffsetMs = (part.position || 0) * msPerTick;
 
     let currentTick = 0;
-    const notes: NoteData[] = part.notes
-      .map((n: any, i: number) => {
-        const originalLyric = n.lyric || '';
-        const parts = originalLyric.split(' ');
-        const cleanedLyric = parts[parts.length - 1];
+    const notes: NoteData[] = part.notes.map((n: any) => {
+      const parts = (n.lyric || '').split(' ');
+      const durationTick = n.duration !== undefined ? n.duration : (n.length || 0);
+      const posTick = n.position !== undefined ? n.position : (n.pos !== undefined ? n.pos : currentTick);
+      currentTick = posTick + durationTick;
 
-        const durationTick = n.duration !== undefined ? n.duration : (n.length || 0);
-        const posTick = n.position !== undefined ? n.position : (n.pos !== undefined ? n.pos : currentTick);
-        
-        const startTimeMs = partOffsetMs + (posTick * msPerTick);
-        const durationMs = durationTick * msPerTick;
-        
-        currentTick = posTick + durationTick;
-        
-        return {
-          index: i + 1,
-          originalLyric: originalLyric,
-          lyric: cleanedLyric,
-          length: durationTick,
-          startTimeMs,
-          durationMs
-        };
-      })
-      // R notes intentionally kept: filtering them creates timing gaps that cause
-      // the closed-mouth image to flash for 1-2 frames at every rest boundary.
-      // R notes simply resolve to getMouthShape('R') === 'default', same as the gap would.
-      .sort((a: NoteData, b: NoteData) => a.startTimeMs - b.startTimeMs);
-
-    const newData = { tempo: bpm, notes };
-    parsedDataRef.current = newData;
-    setParsedData(newData);
-    
-    const unique = new Set<string>();
-    notes.forEach((note: NoteData) => {
-      if (note.lyric && note.lyric !== 'R' && note.lyric !== '息' && note.lyric !== '休' && note.lyric !== '+') {
-        unique.add(note.lyric);
-      }
+      return {
+        id: newNoteId(),
+        lyric: parts[parts.length - 1],
+        startTimeMs: partOffsetMs + (posTick * msPerTick),
+        durationMs: durationTick * msPerTick,
+      };
     });
-    setUniqueLyrics(Array.from(unique));
-    
-    setCurrentTime(0);
-    setCurrentMouth('default');
-    setIsPlaying(false);
-    isPlayingRef.current = false;
-    if (reqRef.current) cancelAnimationFrame(reqRef.current);
-    
-    setShowTrackSelector(false);
+
+    loadParsedData(notes, bpm);
   };
 
   const parseVsqx = (content: string) => {
@@ -2179,44 +2036,18 @@ export default function App() {
     const ticksPerBeat = resolution;
     const msPerTick = 60000 / (bpm * ticksPerBeat);
 
-    const notes: NoteData[] = notesData.map((n: any, i: number) => {
+    const notes: NoteData[] = notesData.map((n: any) => {
       // Clean up lyric like UST (taking last part of space-separated strings, e.g. "a あ")
-      const originalLyric = n.lyric || '';
-      const parts = originalLyric.split(' ');
-      const cleanedLyric = parts[parts.length - 1];
-
-      const startTimeMs = n.absoluteTick * msPerTick;
-      const durationMs = n.durTick * msPerTick;
-      
+      const parts = (n.lyric || '').split(' ');
       return {
-        index: i + 1,
-        originalLyric: originalLyric,
-        lyric: cleanedLyric,
-        length: n.durTick,
-        startTimeMs,
-        durationMs
+        id: newNoteId(),
+        lyric: parts[parts.length - 1],
+        startTimeMs: n.absoluteTick * msPerTick,
+        durationMs: n.durTick * msPerTick,
       };
-    }).sort((a: NoteData, b: NoteData) => a.startTimeMs - b.startTimeMs);
-
-    const newData = { tempo: bpm, notes };
-    parsedDataRef.current = newData;
-    setParsedData(newData);
-    
-    const unique = new Set<string>();
-    notes.forEach((note: NoteData) => {
-      if (note.lyric && note.lyric !== 'R' && note.lyric !== '息' && note.lyric !== '休' && note.lyric !== '+') {
-        unique.add(note.lyric);
-      }
     });
-    setUniqueLyrics(Array.from(unique));
-    
-    setCurrentTime(0);
-    setCurrentMouth('default');
-    setIsPlaying(false);
-    isPlayingRef.current = false;
-    if (reqRef.current) cancelAnimationFrame(reqRef.current);
-    
-    setShowTrackSelector(false);
+
+    loadParsedData(notes, bpm);
   };
 
   const parseUst = (content: string) => {
@@ -2224,8 +2055,9 @@ export default function App() {
       const lines = content.split(/\r\n|\n|\r/);
       let currentTempo = 120;
       let currentSection = '';
-      let currentNote: Partial<NoteData> & { indexStr?: string } = {};
-      const notes: NoteData[] = [];
+      // 仅在 [#数字] 段内非空；UST 没有绝对位置，时间由 Length 依次累加
+      let currentNote: { lyric: string; length: number } | null = null;
+      const rawNotes: { lyric: string; length: number }[] = [];
 
       for (const line of lines) {
         const trimmedLine = line.trim();
@@ -2234,24 +2066,9 @@ export default function App() {
         const sectionMatch = trimmedLine.match(/^\[#(.+)\]$/) || trimmedLine.match(/^\uFEFF?\[#(.+)\]$/);
         if (sectionMatch) {
           // Push previous note safely if it was an actual note
-          if (currentSection.match(/^\d+$/) && currentNote) {
-            notes.push({
-              index: notes.length + 1,
-              originalLyric: currentNote.originalLyric || 'R',
-              lyric: currentNote.lyric || 'R',
-              length: currentNote.length || 480,
-              startTimeMs: 0,
-              durationMs: 0,
-            });
-          }
-          
+          if (currentNote) rawNotes.push(currentNote);
           currentSection = sectionMatch[1];
-          if (currentSection.match(/^\d+$/)) {
-            // Initialize new note
-            currentNote = { indexStr: currentSection, length: 480, lyric: 'R', originalLyric: 'R' };
-          } else {
-            currentNote = {};
-          }
+          currentNote = currentSection.match(/^\d+$/) ? { lyric: 'R', length: 480 } : null;
           continue;
         }
 
@@ -2265,87 +2082,39 @@ export default function App() {
             if (!isNaN(parsedTempo) && parsedTempo > 0) {
               currentTempo = parsedTempo;
             }
-          } else if (currentSection.match(/^\d+$/)) {
+          } else if (currentNote) {
             if (key === 'length') {
               const parsedLen = parseInt(value, 10);
               if (!isNaN(parsedLen)) currentNote.length = parsedLen;
             } else if (key === 'lyric') {
-              currentNote.originalLyric = value || 'R';
-              const parts = currentNote.originalLyric.split(' ');
+              const parts = (value || 'R').split(' ');
               currentNote.lyric = parts[parts.length - 1] || 'R';
             }
           }
         }
       }
 
-      if (currentSection.match(/^\d+$/) && currentNote) {
-        notes.push({
-          index: notes.length + 1,
-          originalLyric: currentNote.originalLyric || 'R',
-          lyric: currentNote.lyric || 'R',
-          length: currentNote.length || 480,
-          startTimeMs: 0,
-          durationMs: 0,
-        });
-      }
+      if (currentNote) rawNotes.push(currentNote);
 
-      if (notes.length === 0) {
+      if (rawNotes.length === 0) {
         console.log("Failed to parse UST. First 200 chars of content:", content.substring(0, 200));
         console.log("Lines length:", lines.length);
         throw new Error("No notes found in .ust file (maybe corrupted?)");
       }
 
-      const finalNotes = recalculateTimings(notes, currentTempo);
-
-      const newData = { tempo: currentTempo, notes: finalNotes };
-      parsedDataRef.current = newData;
-      setParsedData(newData);
-      
-      const unique = new Set<string>();
-      notes.forEach((note: NoteData) => {
-        if (note.lyric && note.lyric !== 'R' && note.lyric !== '息' && note.lyric !== '休' && note.lyric !== '+') {
-          unique.add(note.lyric);
-        }
+      const msPerTick = 60000 / (currentTempo * TICKS_PER_BEAT);
+      let cursorMs = 0;
+      const notes: NoteData[] = rawNotes.map(n => {
+        const durationMs = (n.length || 480) * msPerTick;
+        const note = { id: newNoteId(), lyric: n.lyric, startTimeMs: cursorMs, durationMs };
+        cursorMs += durationMs;
+        return note;
       });
-      setUniqueLyrics(Array.from(unique));
 
-      setCurrentTime(0);
-      setCurrentMouth('default');
-      setShowTrackSelector(false);
-      
-      setIsPlaying(false);
-      isPlayingRef.current = false;
-      if (reqRef.current) cancelAnimationFrame(reqRef.current);
+      loadParsedData(notes, currentTempo);
     } catch (err) {
       console.error("UST Parse Error:", err);
       throw err;
-    }
-  };
-
-  const handleLyricChange = (index: number, newValue: string) => {
-    if (!parsedData) return;
-    const newNotes = [...parsedData.notes];
-    newNotes[index] = { ...newNotes[index], lyric: newValue };
-    const newData = { ...parsedData, notes: newNotes };
-    parsedDataRef.current = newData;
-    setParsedData(newData);
-
-    // Update unique lyrics
-    const unique = new Set<string>();
-    newNotes.forEach(note => {
-      if (note.lyric && note.lyric !== 'R' && note.lyric !== '息') {
-        unique.add(note.lyric);
-      }
-    });
-    setUniqueLyrics(Array.from(unique));
-
-    // Update current mouth if paused and on this frame
-    if (!isPlaying) {
-      const currentNote = newNotes.find(n => currentTime >= n.startTimeMs && currentTime < n.startTimeMs + n.durationMs);
-      const newLyric = currentNote ? currentNote.lyric : '';
-      const newMouth = currentNote ? getMouthShape(currentNote.lyric) : 'default';
-      setCurrentMouth(newMouth);
-      drawCanvas(newMouth, currentTime, newLyric);
     }
   };
 
@@ -3370,70 +3139,6 @@ export default function App() {
           )}
         </section>
 
-        {/* Data Table */}
-        {parsedData && (
-          <section className="space-y-4">
-            <details className="group rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-800/50 overflow-hidden shadow-xl">
-              <summary className="list-none [&::-webkit-details-marker]:hidden px-6 py-4 font-medium text-zinc-700 dark:text-zinc-300 cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-700/50 transition-colors flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <FileText className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
-                  <span>{t.parsedData.replace('{count}', parsedData.notes.length.toString())}</span>
-                  <div className="ml-4 flex items-center space-x-2 bg-white/60 dark:bg-zinc-900/60 px-3 py-1 rounded-md border border-zinc-200 dark:border-zinc-700" onClick={(e) => e.stopPropagation()}>
-                    <span className="text-sm text-zinc-500 dark:text-zinc-400 font-medium">BPM:</span>
-                    <input 
-                      type="number"
-                      step="0.01"
-                      className="w-20 bg-transparent border-none text-sm font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:focus:ring-indigo-400 p-1 rounded text-zinc-900 dark:text-zinc-100"
-                      value={parsedData.tempo}
-                      onChange={handleBpmChange}
-                    />
-                  </div>
-                </div>
-                <span className="text-zinc-500 dark:text-zinc-400 group-open:rotate-180 transition-transform">▼</span>
-              </summary>
-              <div className="overflow-x-auto custom-scrollbar max-h-[400px] border-t border-zinc-200 dark:border-zinc-800">
-                <table className="w-full text-left text-sm whitespace-nowrap">
-                  <thead className="bg-white/80 dark:bg-zinc-900/80 sticky top-0 z-10 backdrop-blur-sm border-b border-zinc-200 dark:border-zinc-800">
-                    <tr>
-                      <th className="px-6 py-4 font-medium text-zinc-600 dark:text-zinc-400 w-24">{t.index}</th>
-                      <th className="px-6 py-4 font-medium text-zinc-600 dark:text-zinc-400">{t.originalLyric}</th>
-                      <th className="px-6 py-4 font-medium text-zinc-600 dark:text-zinc-400">{t.lyric}</th>
-                      <th className="px-6 py-4 font-medium text-zinc-600 dark:text-zinc-400">{t.mappedMouth}</th>
-                      <th className="px-6 py-4 font-medium text-zinc-600 dark:text-zinc-400 text-right">{t.startTimeMsFormatted}</th>
-                      <th className="px-6 py-4 font-medium text-zinc-600 dark:text-zinc-400 text-right">{t.startTimeMsRaw}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-                    {parsedData.notes.map((note, idx) => {
-                      const isCurrent = currentTime >= note.startTimeMs && currentTime < note.startTimeMs + note.durationMs;
-                      return (
-                        <tr key={idx} className={`transition-colors ${isCurrent ? 'bg-indigo-500/20 dark:bg-indigo-500/30' : 'hover:bg-zinc-100/30 dark:hover:bg-zinc-800/50'}`}>
-                          <td className="px-6 py-3 font-mono text-zinc-500 dark:text-zinc-400">{note.index}</td>
-                          <td className="px-6 py-3 text-zinc-700 dark:text-zinc-300">{note.originalLyric}</td>
-                          <td className="px-6 py-3">
-                            <input
-                              type="text"
-                              value={note.lyric}
-                              onChange={(e) => handleLyricChange(idx, e.target.value)}
-                              className="w-20 bg-zinc-50/50 dark:bg-zinc-900/50 border border-zinc-300/50 dark:border-zinc-700/50 rounded px-2 py-1 text-indigo-600 dark:text-indigo-400 font-medium focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500 dark:focus:ring-indigo-400 transition-all"
-                            />
-                          </td>
-                          <td className="px-6 py-3">
-                            <span className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-mono text-xs">
-                              {getMouthShape(note.lyric)}
-                            </span>
-                          </td>
-                          <td className="px-6 py-3 font-mono text-zinc-600 dark:text-zinc-400 text-right">{formatTime(note.startTimeMs)}</td>
-                          <td className="px-6 py-3 font-mono text-zinc-600 dark:text-zinc-400 text-right">{Math.round(note.startTimeMs)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </details>
-          </section>
-        )}
           </div>
         </div>
 
@@ -3549,7 +3254,7 @@ export default function App() {
                 <div className="w-full space-y-2">
                   <div className="flex justify-between text-sm font-mono text-zinc-600 dark:text-zinc-400">
                     <span>{formatTime(currentTime)}</span>
-                    <span>{parsedData.notes.length > 0 ? formatTime(parsedData.notes[parsedData.notes.length - 1].startTimeMs + parsedData.notes[parsedData.notes.length - 1].durationMs) : '00:00.000'}</span>
+                    <span>{formatTime(getTimelineEndMs(parsedData))}</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <button
@@ -3561,7 +3266,7 @@ export default function App() {
                     <input
                       type="range"
                       min="0"
-                      max={parsedData.notes.length > 0 ? parsedData.notes[parsedData.notes.length - 1].startTimeMs + parsedData.notes[parsedData.notes.length - 1].durationMs : 0}
+                      max={getTimelineEndMs(parsedData)}
                       step="1"
                       value={currentTime}
                       onChange={handleSeek}
@@ -3569,6 +3274,20 @@ export default function App() {
                     />
                   </div>
                 </div>
+
+                {/* 音符时间轴编辑器 */}
+                <NoteTimeline
+                  key={notesLoadId}
+                  data={parsedData}
+                  onChange={applyParsedData}
+                  currentTime={currentTime}
+                  audioOffsetMs={(parseFloat(audioOffset) || 0) * 1000}
+                  isPlaying={isPlaying}
+                  disabled={isExporting}
+                  onSeek={seekTo}
+                  onTogglePlay={togglePlay}
+                  language={language}
+                />
 
                 <div className="flex items-center justify-end w-full">
                   <div className="flex portrait:flex-wrap landscape:flex-nowrap items-center justify-center portrait:gap-2 landscape:space-x-2 w-full portrait:w-auto">
