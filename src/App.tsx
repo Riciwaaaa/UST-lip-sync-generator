@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, DragEvent, ChangeEvent } from 'react';
-import { UploadCloud, FileText, AlertCircle, Clock, Music, Play, Pause, Image as ImageIcon, Video, Download, Settings, Layers, X, Globe, Sun, Moon, Github, Search, Info } from 'lucide-react';
+import { UploadCloud, FileText, AlertCircle, Clock, Music, Play, Pause, Image as ImageIcon, Video, Download, Settings, Layers, X, Globe, Sun, Moon, Github, Search, Info, FolderInput, Smile, MonitorPlay } from 'lucide-react';
 import { zipSync, unzipSync, strToU8, strFromU8 } from 'fflate';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
@@ -13,6 +13,9 @@ import { UstSearchModal } from './components/UstSearchModal';
 import { decodeProjectBytes } from './lib/decodeProject';
 import { type NoteData, type ParsedUst, type MouthShape, TICKS_PER_BEAT, getMouthShape, isRestLyric, newNoteId, noteEnd, getTimelineEndMs, findActiveNote, collectUniqueLyrics } from './lib/notes';
 import { NoteTimeline } from './components/NoteTimeline';
+import { CollapsibleSection } from './components/CollapsibleSection';
+import { ImportRow, IMPORT_ROWS_GRID } from './components/ImportRow';
+import { CHANGELOG, APP_VERSION } from './changelog';
 
 const formatTime = (ms: number) => {
   const totalSeconds = Math.floor(ms / 1000);
@@ -34,7 +37,6 @@ const i18n = {
     noticeUsageTitle: "基本使用须知",
     noticeUpdatesTitle: "更新内容",
     noticeUsage: "针对日语UST做的，什么类型的UST都能用。其它语言的UST理论上也可以用，但嘴型只能用单字覆盖一个个传。需要忽略嘴型设置里的五个元音。\n受性能限制，不建议在移动端浏览器使用。\n可以从bowlroll等地找到各种公开配布的UST文件，发布使用他人UST制作的内容时需要标注原作者。\n有什么问题可以联系我 -> \nB站：UID 487559302\nemail: riciwaaaa@gmail.com",
-    noticeUpdates: "26/7/24更新：新增了预设导出/导入。预览窗口右上角的标记显示现在可以点击隐藏了。理论上现在导出失败的情况会少一点了。\n26/6/25更新：感谢ink老师贡献的ust在线搜索功能！\n26/6/14更新：加了弹出窗口功能。\n26/4/19更新：现在也支持导入ustx/vsqx文件了！另外还做了一点ui优化。\n26/3/22更新：现在可以进入全屏模式直接录屏了，移动端导出失败可以试试这么做。",
     buyMeACoffee: "☕ 赏杯奶茶？",
     coffeePending: "（图片待上传）",
     labelClickToHide: "点击隐藏",
@@ -45,19 +47,22 @@ const i18n = {
     presetExportFailed: "预设导出失败，请重试。",
     presetImportFailed: "预设导入失败：文件可能已损坏，或不是本工具导出的预设包。",
     confirm: "确认",
-    step1: "嘴型设置",
-    step2: "UST/音频/背景图",
+    step1: "UST/音频/背景图",
+    step2: "嘴型设置",
     step3: "预览与导出",
-    uploadUst: "导入 .ust 文件",
-    uploadUstDesc: "生成时间轴",
-    uploadAudio: "导入音频 (可选)",
+    importProject: "工程",
+    importAudio: "音频",
+    importBackground: "背景",
+    projectHint: "拖入或选择 .ust / .ustx / .vsqx 文件",
+    notImportedOptional: "未导入（可选）",
+    chooseFile: "选择文件",
+    replaceFile: "更换",
+    collapse: "收起",
+    expand: "展开",
     audioUploaded: "已导入音频",
-    uploadAudioDesc: "同步播放与导出",
     audioPlayFailed: "浏览器无法播放该音频（编码不受支持或文件损坏）。预览将静音继续播放，导出时仍会尝试混入该音频。",
-    uploadBg: "导入背景图/视频 (可选)",
     bgUploaded: "已导入背景",
     solidBg: "纯色背景",
-    uploadBgDesc: "底层图层",
     customSize: "自定义画布尺寸",
     width: "画布宽度",
     height: "画布高度",
@@ -107,7 +112,6 @@ const i18n = {
     movDesc: "MOV (H.264)",
     mkvDesc: "MKV (H.264)",
     gifDesc: "GIF (无音频)",
-    selected: "已选择: ",
     notIsolatedError: "环境未开启跨域隔离 (Cross-Origin Isolated)，FFmpeg 无法加载。请检查部署配置 (如 vercel.json)。",
     renderingFrames: "正在渲染帧",
     encodingVideo: "正在编码视频...",
@@ -117,7 +121,6 @@ const i18n = {
     exportErrMemory: "设备内存不足。视频渲染需要耗费大量内存，强烈建议关闭其他多余网页，或改用电脑端浏览器进行导出。",
     exportErrSab: "您的浏览器环境不支持高性能多线程渲染。请更换为最新的 PC 端 Chrome 或 Edge 浏览器。",
     exportErrGeneric: "导出失败，发生异常。请尝试刷新页面、更换导出格式，或使用全屏录制作为备用方案。错误详情：{error}",
-    noUstSearch: "没有UST工程文件？在线搜索",
     searchingOnline: "在线搜索UST",
   },
   en: {
@@ -129,7 +132,6 @@ const i18n = {
     noticeUsageTitle: "Basic Usage Notes",
     noticeUpdatesTitle: "Changelog",
     noticeUsage: "Designed for Japanese USTs, but any type of UST will work. USTs in other languages can theoretically be used, but mouth shapes must be uploaded one by one using the single-character override feature. You will need to ignore the five basic vowel settings.\nDue to performance limitations, using this tool on mobile browsers is highly not recommended.\nYou can find various publicly distributed UST files on sites like BowlRoll. Please note that when publishing content made using someone else's UST, you must credit the original author.\nIf you have any questions or feedback, feel free to contact me -> \nemail: riciwaaaa@gmail.com",
-    noticeUpdates: "26/7/24 Update: Added preset export/import. The label in the top-right corner of the preview window can now be clicked to hide. Export failures should also be a bit less common now, in theory.\n26/6/25 Update: Huge thanks to ink for contributing the ust online search feature!\n26/6/14 Update: Added a pop-out window feature.\n26/4/19 Update: Now supports importing .ustx and .vsqx files! We've also made a few UI improvements.\n26/3/22 Update: You can now enter fullscreen mode to record your screen directly. If exporting fails on mobile, you can try this method.",
     buyMeACoffee: "☕ Buy me a coffee",
     coffeePending: "(image coming soon)",
     labelClickToHide: "Click to hide",
@@ -140,19 +142,22 @@ const i18n = {
     presetExportFailed: "Failed to export preset. Please try again.",
     presetImportFailed: "Failed to import preset: the file may be corrupted or was not exported by this tool.",
     confirm: "Confirm",
-    step1: "Mouth Shapes",
-    step2: "UST(X) / Audio / Background",
+    step1: "UST(X) / Audio / Background",
+    step2: "Mouth Shapes",
     step3: "Monitor & Export",
-    uploadUst: "Import Project",
-    uploadUstDesc: ".ust / .ustx / .vsqx",
-    uploadAudio: "Import Audio (Optional)",
+    importProject: "Project",
+    importAudio: "Audio",
+    importBackground: "Background",
+    projectHint: "Drop or choose a .ust / .ustx / .vsqx file",
+    notImportedOptional: "Not imported (optional)",
+    chooseFile: "Choose file",
+    replaceFile: "Replace",
+    collapse: "Collapse",
+    expand: "Expand",
     audioUploaded: "Audio Imported",
-    uploadAudioDesc: "Sync playback & export",
     audioPlayFailed: "This browser cannot play the audio file (unsupported codec or corrupt file). Preview keeps playing without sound; export will still try to mux it in.",
-    uploadBg: "Import Background (Optional)",
     bgUploaded: "Background Imported",
     solidBg: "Solid Background",
-    uploadBgDesc: "Bottom layer",
     customSize: "Custom Canvas Size",
     width: "Canvas Width",
     height: "Canvas Height",
@@ -202,7 +207,6 @@ const i18n = {
     movDesc: "MOV (H.264)",
     mkvDesc: "MKV (H.264)",
     gifDesc: "GIF (No Audio)",
-    selected: "Selected: ",
     notIsolatedError: "Environment is not cross-origin isolated. FFmpeg cannot load. Please check your deployment settings (e.g., vercel.json).",
     renderingFrames: "Rendering frames",
     encodingVideo: "Encoding video...",
@@ -212,7 +216,6 @@ const i18n = {
     exportErrMemory: "Device is low on memory. Close other tabs or switch to a PC browser for exporting.",
     exportErrSab: "Your browser does not support high-performance multi-threaded rendering. Please use the latest Chrome or Edge on PC.",
     exportErrGeneric: "Export failed. Try refreshing the page, switching export format, or using Fullscreen mode as a fallback. Error: {error}",
-    noUstSearch: "No UST file? Search Online",
     searchingOnline: "Search UST Online",
   },
   ja: {
@@ -224,7 +227,6 @@ const i18n = {
     noticeUsageTitle: "基本的な使い方",
     noticeUpdatesTitle: "更新履歴",
     noticeUsage: "日本語のUST向けに作られていますが、どの種類のUSTでも使用可能です。他言語のUSTも理論上は使用できますが、口の形は「単字特例（個別の文字の上書き）」機能を使って一つずつアップロードする必要があります。その場合、基本設定の5つの母音は無視してください。\nパフォーマンスの制限により、スマートフォンなどのモバイルブラウザでの使用は推奨していません（PC環境を推奨します）。\nBowlRollなどのサイトで、公開・配布されている様々なUSTファイルを見つけることができます。他の方が作成したUSTを使用して動画などの制作物を公開する際は、必ず原作者のクレジット（お名前）を表記してください。\nご質問や不具合の報告があれば、こちらまでご連絡ください -> \nemail: riciwaaaa@gmail.com",
-    noticeUpdates: "26/7/24 アップデート: プリセットの書き出し・読み込み機能を追加しました。プレビュー画面右上のラベル表示はクリックで非表示にできるようになりました。理論上、エクスポート失敗も少し減っているはずです。\n26/6/25 アップデート: ustオンライン検索機能を提供してくださったinkさんに、心より感謝いたします！\n26/6/14 アップデート: ポップアウトウィンドウ機能を追加しました。\n26/4/19 アップデート: 新たに .ustx および .vsqx ファイルのインポートに対応しました！また、UIも少し使いやすく改善しています。\n26/3/22 アップデート: フルスクリーンモードに入って直接画面録画ができるようになりました。モバイル端末でエクスポートに失敗する場合は、この方法をお試しください。",
     buyMeACoffee: "☕ コーヒーをおごる",
     coffeePending: "（画像は準備中）",
     labelClickToHide: "クリックで非表示",
@@ -235,19 +237,22 @@ const i18n = {
     presetExportFailed: "プリセットの書き出しに失敗しました。もう一度お試しください。",
     presetImportFailed: "プリセットの読み込みに失敗しました。ファイルが破損しているか、このツールで書き出したものではない可能性があります。",
     confirm: "確認",
-    step1: "口パク設定",
-    step2: "UST(X) / 音声 / 背景",
+    step1: "UST(X) / 音声 / 背景",
+    step2: "口パク設定",
     step3: "モニターと出力",
-    uploadUst: "プロジェクトをインポート",
-    uploadUstDesc: ".ust / .ustx / .vsqx",
-    uploadAudio: "音声をインポート (任意)",
+    importProject: "プロジェクト",
+    importAudio: "音声",
+    importBackground: "背景",
+    projectHint: ".ust / .ustx / .vsqx をドロップまたは選択",
+    notImportedOptional: "未インポート（任意）",
+    chooseFile: "ファイルを選択",
+    replaceFile: "変更",
+    collapse: "折りたたむ",
+    expand: "展開",
     audioUploaded: "音声インポート済み",
-    uploadAudioDesc: "同期再生と出力",
     audioPlayFailed: "この音声はブラウザで再生できません（未対応のコーデックまたは破損）。プレビューは無音で続行し、書き出し時には音声の合成を試みます。",
-    uploadBg: "背景をインポート (任意)",
     bgUploaded: "背景インポート済み",
     solidBg: "単色背景",
-    uploadBgDesc: "最背面レイヤー",
     customSize: "キャンバスサイズ",
     width: "幅",
     height: "高さ",
@@ -297,7 +302,6 @@ const i18n = {
     movDesc: "MOV (H.264)",
     mkvDesc: "MKV (H.264)",
     gifDesc: "GIF (音声なし)",
-    selected: "選択中: ",
     notIsolatedError: "環境がクロスオリジン分離(Cross-Origin Isolated)されていません。FFmpegを読み込めません。デプロイ設定(vercel.jsonなど)を確認してください。",
     renderingFrames: "フレームをレンダリング中",
     encodingVideo: "動画をエンコード中...",
@@ -307,7 +311,6 @@ const i18n = {
     exportErrMemory: "デバイスのメモリが不足しています。不要なタブを閉じるか、PCブラウザを使用してエクスポートしてください。",
     exportErrSab: "お使いのブラウザ環境は高性能なマルチスレッドレンダリングに対応していません。最新のPC版Chrome / Edgeをお使いください。",
     exportErrGeneric: "エクスポートに失敗しました。ページを更新して再試行するか、エクスポート形式を変更するか、全画面録画をお試しください。エラー: {error}",
-    noUstSearch: "USTファイルをお持ちでない方？オンライン検索",
     searchingOnline: "USTをオンライン検索",
   }
 };
@@ -571,7 +574,6 @@ export default function App() {
   const [notesLoadId, setNotesLoadId] = useState(0);
   const [fileName, setFileName] = useState<string>('');
   const [error, setError] = useState<string>('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 播放器与画布状态
   const [mouthImages, setMouthImages] = useState<Record<MouthShape, string>>({ a: '', i: '', u: '', e: '', o: '', default: '' });
@@ -621,6 +623,7 @@ export default function App() {
   const audioBrokenRef = useRef(false);
   const [audioError, setAudioError] = useState('');
   const [bgImageUrl, setBgImageUrl] = useState<string>('');
+  const [bgFileName, setBgFileName] = useState<string>('');
   const bgImageElementRef = useRef<HTMLImageElement | null>(null);
   
   // GIF 背景状态
@@ -667,61 +670,6 @@ export default function App() {
       setError(`${t.parseError} \n${errMsg}`);
     }
   };
-
-  // ------------------------------------------------------------------------
-  // 新增：响应式与面板拖拽状态 (Resizable Divider)
-  // ------------------------------------------------------------------------
-  const [panelRatio, setPanelRatio] = useState(60); // 默认比例 6:4 (60% left, 40% right)
-  const [isDraggingDivider, setIsDraggingDivider] = useState(false);
-  const mainContainerRef = useRef<HTMLDivElement>(null);
-  const [isPortraitTheme, setIsPortraitTheme] = useState(false);
-
-  useEffect(() => {
-    const handleResize = () => setIsPortraitTheme(window.innerHeight >= window.innerWidth);
-    window.addEventListener('resize', handleResize);
-    handleResize(); // 初始校验
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  useEffect(() => {
-    if (!isDraggingDivider) return;
-
-    const handleMove = (e: MouseEvent | TouchEvent) => {
-      // 移动端拖拽时不希望页面滚动
-      if (e.cancelable && e.type === 'touchmove') e.preventDefault();
-      
-      if (!mainContainerRef.current) return;
-      const rect = mainContainerRef.current.getBoundingClientRect();
-      
-      let clientX = 'touches' in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
-      let clientY = 'touches' in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
-
-      let newRatio;
-      if (isPortraitTheme) {
-        newRatio = ((clientY - rect.top) / rect.height) * 100;
-      } else {
-        newRatio = ((clientX - rect.left) / rect.width) * 100;
-      }
-
-      newRatio = Math.max(20, Math.min(80, newRatio)); // 限制在 20% - 80% 之间
-      setPanelRatio(newRatio);
-    };
-
-    const handleEnd = () => setIsDraggingDivider(false);
-
-    document.addEventListener('mousemove', handleMove);
-    document.addEventListener('touchmove', handleMove, { passive: false });
-    document.addEventListener('mouseup', handleEnd);
-    document.addEventListener('touchend', handleEnd);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMove);
-      document.removeEventListener('touchmove', handleMove);
-      document.removeEventListener('mouseup', handleEnd);
-      document.removeEventListener('touchend', handleEnd);
-    };
-  }, [isDraggingDivider, isPortraitTheme]);
-  // ------------------------------------------------------------------------
 
   // 辅助函数：创建并追踪 ObjectURL
   const createTrackedURL = (file: Blob) => {
@@ -2212,10 +2160,6 @@ export default function App() {
     isPlayingRef.current = false;
     setCurrentTime(0);
     setCurrentMouth('default');
-    
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
   };
 
   const handleClearAudio = (e: React.MouseEvent) => {
@@ -2244,6 +2188,7 @@ export default function App() {
       revokeTrackedURL(bgImageUrl);
     }
     setBgImageUrl('');
+    setBgFileName('');
     bgImageElementRef.current = null;
     setBgGifFrames(null);
     bgGifFramesRef.current = null;
@@ -2261,6 +2206,7 @@ export default function App() {
 
     if (bgImageUrl) revokeTrackedURL(bgImageUrl);
     setBgImageUrl('');
+    setBgFileName('');
     bgImageElementRef.current = null;
     setBgGifFrames(null);
     bgGifFramesRef.current = null;
@@ -2275,6 +2221,7 @@ export default function App() {
 
   // 载入背景图/GIF/动画 webp：文件输入框、拖拽区域、预设导入共用这一份逻辑
   const loadBackgroundFile = async (file: File): Promise<void> => {
+    setBgFileName(file.name);
     setBackgroundColor(null);
     backgroundColorRef.current = null;
 
@@ -2531,16 +2478,12 @@ export default function App() {
     });
   };
 
-  const handleAudioUpload = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) loadAudioFile(file);
-  };
-
-  const handleBgImageUpload = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    await loadBackgroundFile(file);
-  };
+  // 分区标题左侧的图标圆点
+  const stepBadge = (content: React.ReactNode, colorClass: string) => (
+    <div className={`w-6 h-6 landscape:w-7 landscape:h-7 rounded-full flex items-center justify-center text-sm font-bold ${colorClass}`}>{content}</div>
+  );
+  const sectionToggleTitle = { collapse: t.collapse, expand: t.expand };
+  const compactInput = 'h-7 bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-md px-2 text-xs text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:focus:ring-indigo-400';
 
   return (
     <div className="flex flex-col h-[100dvh] bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans selection:bg-indigo-500/30 overflow-hidden">
@@ -2596,7 +2539,8 @@ export default function App() {
       )}
 
       {/* Mobile Absolute Language & Theme Buttons */}
-      <div className="fixed top-4 right-4 z-50 portrait:flex landscape:hidden flex-col items-end space-y-3">
+      {/* 横向一排：单栏下竖屏标题变小，竖排会压到第一个分区 */}
+      <div className="fixed top-3 right-3 z-50 portrait:flex landscape:hidden flex-row items-center gap-2">
         <button
           onClick={() => setShowModal(true)}
           className="w-9 h-9 flex items-center justify-center overflow-hidden bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm shadow-md border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-full transition-all"
@@ -2633,10 +2577,11 @@ export default function App() {
 
       {/* Header */}
       <header className="landscape:flex portrait:hidden flex-none h-16 w-full backdrop-blur-md bg-zinc-50/80 dark:bg-zinc-950/80 border-b border-zinc-200 dark:border-zinc-800 z-40">
-        <div className="max-w-7xl w-full mx-auto px-6 h-full flex items-center justify-between">
+        <div className="max-w-4xl w-full mx-auto px-8 h-full flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <Music className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
             <span className="font-semibold text-zinc-900 dark:text-zinc-100">{t.title}</span>
+            <span className="text-xs font-mono text-zinc-400 dark:text-zinc-500">v{APP_VERSION}</span>
           </div>
           <div className="flex items-center space-x-4">
             <button
@@ -2696,9 +2641,28 @@ export default function App() {
               </div>
 
               <div className="space-y-2">
-                <h4 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">{t.noticeUpdatesTitle}</h4>
-                <div className="h-28 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg p-4 overflow-y-auto border border-zinc-200 dark:border-zinc-800 text-sm text-zinc-600 dark:text-zinc-400 whitespace-pre-wrap custom-scrollbar">
-                  {t.noticeUpdates}
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">{t.noticeUpdatesTitle}</h4>
+                  <span className="text-xs font-mono text-zinc-500 dark:text-zinc-400">v{APP_VERSION}</span>
+                </div>
+                <div className="h-40 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg p-4 overflow-y-auto border border-zinc-200 dark:border-zinc-800 custom-scrollbar space-y-3">
+                  {CHANGELOG.map((entry) => (
+                    <div key={entry.version ?? entry.date} className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        {entry.version && (
+                          <span className="px-1.5 py-0.5 rounded-md bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 text-xs font-mono font-semibold">
+                            v{entry.version}
+                          </span>
+                        )}
+                        <span className="text-xs font-mono text-zinc-500 dark:text-zinc-400">{entry.date}</span>
+                      </div>
+                      <ul className="list-disc pl-5 space-y-0.5 text-sm text-zinc-600 dark:text-zinc-400 marker:text-zinc-400 dark:marker:text-zinc-600">
+                        {entry.items[language].map((item, i) => (
+                          <li key={i}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -2751,315 +2715,99 @@ export default function App() {
         </div>
       )}
 
-      {/* Main Content */}
-      <div
-        ref={mainContainerRef}
-        className={`flex-1 flex portrait:flex-col landscape:flex-row overflow-hidden ${isDraggingDivider ? 'select-none' : ''}`}
-      >
-        {/* Left Console */}
-        <div 
-          className="portrait:w-full landscape:h-full overflow-y-auto custom-scrollbar landscape:[direction:rtl] z-10"
-          style={{ 
-            [isPortraitTheme ? 'height' : 'width']: `${panelRatio}%`,
-            flexShrink: 0, 
-            flexGrow: 0 
-          }}
-        >
-          {/* Inner wrapper for RTL to LTR trick */}
-          <div className="w-full h-max landscape:[direction:ltr] portrait:p-4 landscape:p-8 portrait:space-y-6 landscape:space-y-12">
-            
-            {/* Big Title Header */}
-          <header className="space-y-1 landscape:space-y-3 text-center portrait:pt-20 landscape:mt-0">
-            <h1 className="text-[clamp(1.5rem,6vw,2.25rem)] xl:text-4xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50 leading-tight px-4">
-              {t.title}
-            </h1>
-            <p className="text-[clamp(0.875rem,3.5vw,1rem)] xl:text-lg text-zinc-600 dark:text-zinc-400 px-4">
-              {t.subtitle}
-            </p>
+      {/* Main Content：单栏，从上到下 导入 → 嘴型 → 单字覆盖 → 预览与导出 */}
+      <main className="flex-1 overflow-y-auto custom-scrollbar">
+        <div className="max-w-4xl w-full mx-auto portrait:p-4 landscape:px-8 landscape:py-6 portrait:space-y-6 landscape:space-y-8">
+
+          {/* 竖屏没有顶栏，保留一个小标题；横屏标题已在顶栏 */}
+          <header className="landscape:hidden text-center pt-16 space-y-0.5">
+            <h1 className="text-xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">{t.title}</h1>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">{t.subtitle}</p>
           </header>
 
-        {/* Step 1: Actors */}
-        <section className="portrait:space-y-4 landscape:space-y-6">
-          <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 portrait:pb-2 landscape:pb-4">
-            <div className="flex items-center portrait:space-x-2 landscape:space-x-3">
-              <div className="portrait:w-6 portrait:h-6 landscape:w-8 landscape:h-8 portrait:text-sm landscape:text-base rounded-full bg-indigo-500/20 text-indigo-600 dark:bg-indigo-500/30 dark:text-indigo-400 flex items-center justify-center font-bold">1</div>
-              <h2 className="portrait:text-lg landscape:text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{t.step1}</h2>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="file"
-                ref={presetInputRef}
-                accept=".zip,application/zip"
-                className="hidden"
-                onChange={(e) => handleImportPreset(e.target.files?.[0])}
-              />
-              <button
-                onClick={handleExportPreset}
-                disabled={isPresetBusy}
-                title={t.exportPreset}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-800/60 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span className="portrait:hidden">{t.exportPreset}</span>
-              </button>
-              <button
-                onClick={() => presetInputRef.current?.click()}
-                disabled={isPresetBusy}
-                title={t.importPreset}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-800/60 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <UploadCloud className="w-3.5 h-3.5" />
-                <span className="portrait:hidden">{t.importPreset}</span>
-              </button>
-            </div>
-          </div>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(60px,1fr))] landscape:grid-cols-[repeat(auto-fill,minmax(100px,1fr))] 2xl:landscape:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] portrait:gap-2 landscape:gap-4">
-            {mouthShapeConfigs.map((config) => (
-              <DragDropWrapper
-                key={config.id}
-                onDropFile={(file) => handleMouthImageUpload(config.id, file)}
-                accept="image/*"
-                className={(isDragging) => `
-                  relative flex flex-col items-center justify-center aspect-square rounded-2xl border-2 border-dashed cursor-pointer overflow-hidden transition-all
-                  ${config.bg}
-                  ${isDragging ? 'border-emerald-500 bg-emerald-500/10 scale-[1.02]' : ''}
-                `}
-              >
-                {(isDragging) => (
-                  <>
-                    <label className="absolute inset-0 w-full h-full cursor-pointer z-0">
-                      <input 
-                        type="file" 
-                        accept="image/*" 
-                        className="hidden" 
-                        onChange={(e) => e.target.files?.[0] && handleMouthImageUpload(config.id, e.target.files[0])}
-                      />
-                    </label>
-                    {mouthImages[config.id] ? (
-                      <>
-                        <img src={mouthImages[config.id]} alt={config.label} className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
-                        <button
-                          onClick={(e) => handleClearMouthImage(config.id, e)}
-                          className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-red-500/80 text-white rounded-full backdrop-blur-sm transition-colors z-20"
-                          title="Clear image"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </>
-                    ) : (
-                      <div className="flex flex-col items-center space-y-2 z-10 pointer-events-none">
-                        <UploadCloud className={`w-8 h-8 ${config.color} opacity-70`} />
-                        <span className={`font-medium ${config.color}`}>{config.label}</span>
-                      </div>
-                    )}
-                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm p-2 text-center text-xs font-medium text-white/90 translate-y-full hover:translate-y-0 transition-transform z-10 pointer-events-none">
-                      {t.clickToChange}
-                    </div>
-                  </>
-                )}
-              </DragDropWrapper>
-            ))}
-          </div>
-        </section>
-
-        {/* Custom Overrides */}
-        {uniqueLyrics.length > 0 && (
-          <section className="portrait:space-y-4 landscape:space-y-6">
-            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 portrait:pb-2 landscape:pb-4">
-              <div className="flex items-center portrait:space-x-2 landscape:space-x-3">
-                <div className="portrait:w-6 portrait:h-6 landscape:w-8 landscape:h-8 rounded-full bg-purple-500/20 text-purple-600 dark:bg-purple-500/30 dark:text-purple-400 flex items-center justify-center font-bold">
-                  <Settings className="portrait:w-3 portrait:h-3 landscape:w-4 landscape:h-4" />
-                </div>
-                <h2 className="portrait:text-lg landscape:text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{t.specialLyrics}</h2>
-              </div>
-              <span className="portrait:text-xs landscape:text-sm text-zinc-600 dark:text-zinc-400">{t.detectedSounds.replace('{count}', uniqueLyrics.length.toString())}</span>
-            </div>
-            
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(50px,1fr))] landscape:grid-cols-[repeat(auto-fill,minmax(80px,1fr))] portrait:gap-2 landscape:gap-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-              {uniqueLyrics.map((lyric) => {
-                const baseShape = getMouthShape(lyric);
-                const hasOverride = !!overrideImages[lyric];
-                const displayImg = hasOverride ? overrideImages[lyric] : mouthImages[baseShape];
-                
-                return (
-                  <DragDropWrapper
-                    key={lyric}
-                    onDropFile={(file) => handleOverrideImageUpload(lyric, file)}
-                    accept="image/*"
-                    className={(isDragging) => `
-                      relative flex flex-col items-center justify-center aspect-square rounded-xl border cursor-pointer overflow-hidden transition-all
-                      ${hasOverride ? 'bg-purple-500/10 border-purple-500/50 hover:border-purple-400' : 'bg-zinc-100/50 dark:bg-zinc-800/50 border-zinc-300/50 dark:border-zinc-700/50 hover:border-zinc-500 dark:hover:border-zinc-400'}
-                      ${isDragging ? 'border-emerald-500 bg-emerald-500/10 scale-[1.02]' : ''}
-                    `}
+          {/* ① 工程 / 音频 / 背景 */}
+          <CollapsibleSection badge={stepBadge(<FolderInput className="w-3.5 h-3.5" />, 'bg-emerald-500/20 text-emerald-600 dark:bg-emerald-500/30 dark:text-emerald-400')} title={t.step1}>
+            <div className={`${IMPORT_ROWS_GRID} rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-900/50 divide-y divide-zinc-200 dark:divide-zinc-800 overflow-hidden`}>
+              <ImportRow
+                icon={<FileText className="w-4 h-4" />}
+                label={t.importProject}
+                status={fileName || t.projectHint}
+                hasFile={!!fileName}
+                accept=".ust,.ustx,.vsqx"
+                onFile={handleFile}
+                onClear={handleClearUst}
+                chooseLabel={t.chooseFile}
+                replaceLabel={t.replaceFile}
+                clearTitle="Clear UST"
+                actions={
+                  <button
+                    type="button"
+                    onClick={() => setShowUstSearch(true)}
+                    title={t.searchingOnline}
+                    className={`flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-xs font-medium transition-colors ${
+                      fileName
+                        ? 'text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                        : 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/20'}`}
                   >
-                    {(isDragging) => (
-                      <>
-                        <label className="absolute inset-0 w-full h-full cursor-pointer z-0">
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(e) => e.target.files?.[0] && handleOverrideImageUpload(lyric, e.target.files[0])}
-                          />
-                        </label>
-                        
-                        {displayImg ? (
-                          <img src={displayImg} alt={lyric} className={`absolute inset-0 w-full h-full object-contain pointer-events-none ${!hasOverride ? 'opacity-50 grayscale' : ''}`} />
-                        ) : (
-                          <span className="text-2xl font-bold text-zinc-700 dark:text-zinc-300 pointer-events-none">{lyric}</span>
-                        )}
-                        
-                        {hasOverride && (
-                          <button
-                            onClick={(e) => handleClearOverrideImage(lyric, e)}
-                            className="absolute top-1 right-1 p-1 bg-black/50 hover:bg-red-500/80 text-white rounded-full backdrop-blur-sm transition-colors z-20"
-                            title="Clear override"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        )}
-                        
-                        <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-black/60 backdrop-blur text-[10px] font-bold text-white rounded pointer-events-none">
-                          {lyric}
-                        </div>
-                        
-                        {!hasOverride && (
-                          <div className="absolute top-1 right-1 px-1.5 py-0.5 bg-zinc-100/80 dark:bg-zinc-800/80 backdrop-blur text-[8px] font-mono text-zinc-600 dark:text-zinc-400 rounded pointer-events-none">
-                            {baseShape}
-                          </div>
-                        )}
-                        
-                        <div className="absolute inset-0 bg-black/60 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center z-10 pointer-events-none">
-                          <span className="text-xs font-medium text-white">{hasOverride ? t.change : t.override}</span>
-                        </div>
-                      </>
-                    )}
-                  </DragDropWrapper>
-                );
-              })}
-            </div>
-          </section>
-        )}
-
-        {/* Step 2: Script & Assets */}
-        <section className="portrait:space-y-4 landscape:space-y-6">
-          <div className="flex items-center portrait:space-x-2 landscape:space-x-3 border-b border-zinc-200 dark:border-zinc-800 portrait:pb-2 landscape:pb-4">
-            <div className="portrait:w-6 portrait:h-6 landscape:w-8 landscape:h-8 rounded-full bg-emerald-500/20 text-emerald-600 dark:bg-emerald-500/30 dark:text-emerald-400 flex items-center justify-center font-bold">2</div>
-            <h2 className="portrait:text-lg landscape:text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{t.step2}</h2>
-          </div>
-          
-          <div className="grid grid-cols-1 landscape:grid-cols-3 portrait:gap-4 landscape:gap-6">
-            {/* UST Upload */}
-            <DragDropWrapper
-              onDropFile={handleFile}
-              accept=".ust,.ustx,.vsqx"
-              onClick={() => fileInputRef.current?.click()}
-              className={(isDragging) => `
-                relative group cursor-pointer flex flex-col items-center justify-center 
-                w-full portrait:h-24 landscape:h-48 portrait:rounded-2xl landscape:rounded-3xl border-2 border-dashed transition-transform duration-300 ease-out
-                ${isDragging 
-                  ? 'border-emerald-500 bg-emerald-500/10 scale-[1.02]' 
-                  : 'border-zinc-200 dark:border-zinc-700 bg-white/50 dark:bg-zinc-800/50 hover:border-zinc-300 dark:hover:border-zinc-600 hover:bg-white dark:hover:bg-zinc-800'}
-              `}
-            >
-              {(isDragging) => (
-                <>
-                  <input type="file" ref={fileInputRef} onChange={(e) => e.target.files && handleFile(e.target.files[0])} accept=".ust,.ustx,.vsqx" className="hidden" />
-                  <div className="flex portrait:flex-row landscape:flex-col items-center portrait:space-x-4 landscape:space-y-4 pointer-events-none">
-                    <div className={`p-2 landscape:p-4 rounded-full ${isDragging ? 'bg-emerald-500/20 text-emerald-600 dark:bg-emerald-500/30 dark:text-emerald-400' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 group-hover:text-zinc-700 dark:group-hover:text-zinc-300'}`}>
-                      <FileText className="w-6 h-6 landscape:w-8 landscape:h-8" />
-                    </div>
-                    <div className="portrait:text-left landscape:text-center portrait:space-y-0 landscape:space-y-1">
-                      <p className="portrait:text-sm landscape:text-lg font-medium text-zinc-800 dark:text-zinc-200 landscape:px-4 line-clamp-1 truncate w-full">
-                        {fileName ? `${t.selected}${fileName}` : t.uploadUst}
-                      </p>
-                      <p className="portrait:text-xs landscape:text-sm text-zinc-500 dark:text-zinc-400">{t.uploadUstDesc}</p>
-                    </div>
-                  </div>
-                  {fileName && (
-                    <button
-                      onClick={handleClearUst}
-                      className="absolute top-4 right-4 p-2 bg-black/50 hover:bg-red-500/80 text-white rounded-full backdrop-blur-sm transition-colors z-20"
-                      title="Clear UST"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  )}
-                </>
-              )}
-            </DragDropWrapper>
-
-            {/* Online Search Button */}
-            <div className="flex items-center justify-center">
-              <button
-                onClick={() => setShowUstSearch(true)}
-                className="relative group flex flex-col items-center justify-center 
-                  w-full portrait:h-24 landscape:h-48 portrait:rounded-2xl landscape:rounded-3xl border-2 border-dashed transition-transform duration-300 ease-out
-                  border-indigo-300/50 dark:border-indigo-600/30 bg-indigo-50/30 dark:bg-indigo-950/20 hover:border-indigo-400 dark:hover:border-indigo-500 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/40"
-              >
-                <div className="flex portrait:flex-row landscape:flex-col items-center portrait:space-x-4 landscape:space-y-4 pointer-events-none">
-                  <div className="p-2 landscape:p-4 rounded-full bg-indigo-100/50 dark:bg-indigo-900/30 text-indigo-500 dark:text-indigo-400 group-hover:bg-indigo-200/50 dark:group-hover:bg-indigo-800/40 group-hover:text-indigo-600 dark:group-hover:text-indigo-300">
-                    <Search className="w-6 h-6 landscape:w-8 landscape:h-8" />
-                  </div>
-                  <div className="portrait:text-left landscape:text-center portrait:space-y-0 landscape:space-y-1">
-                    <p className="portrait:text-sm landscape:text-lg font-medium text-indigo-600 dark:text-indigo-400 landscape:px-4">
-                      {t.noUstSearch}
-                    </p>
-                    <p className="portrait:text-xs landscape:text-sm text-indigo-400/70 dark:text-indigo-500/70">{t.searchingOnline}</p>
-                  </div>
-                </div>
-              </button>
-            </div>
-
-            {/* Audio Upload */}
-            <DragDropWrapper
-              onDropFile={loadAudioFile}
-              accept="audio/*,.mp3,.wav,.ogg,.flac,.aac,.m4a,.mp4,.webm,.mov"
-              className={(isDragging) => `
-                relative group cursor-pointer flex flex-col items-center justify-center 
-                w-full portrait:h-24 landscape:h-48 portrait:rounded-2xl landscape:rounded-3xl border-2 border-dashed transition-transform duration-300 ease-out
-                ${isDragging 
-                  ? 'border-emerald-500 bg-emerald-500/10 scale-[1.02]' 
-                  : 'border-zinc-200 dark:border-zinc-700 bg-white/50 dark:bg-zinc-800/50 hover:border-zinc-300 dark:hover:border-zinc-600 hover:bg-white dark:hover:bg-zinc-800'}
-              `}
-            >
-              {(isDragging) => (
-                <>
-                  <label className="absolute inset-0 w-full h-full cursor-pointer">
-                    <input type="file" accept="audio/*,.mp3,.wav,.ogg,.flac,.aac,.m4a,.mp4,.webm,.mov" onChange={handleAudioUpload} className="hidden" />
-                  </label>
-                  <div className="flex portrait:flex-row landscape:flex-col items-center portrait:space-x-4 landscape:space-y-4 pointer-events-none">
-                    <div className={`p-2 landscape:p-4 rounded-full ${isDragging ? 'bg-emerald-500/20 text-emerald-600 dark:bg-emerald-500/30 dark:text-emerald-400' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 group-hover:text-zinc-700 dark:group-hover:text-zinc-300'}`}>
-                      <Music className="w-6 h-6 landscape:w-8 landscape:h-8" />
-                    </div>
-                    <div className="portrait:text-left landscape:text-center portrait:space-y-0 landscape:space-y-1">
-                      <p className="portrait:text-sm landscape:text-lg font-medium text-zinc-800 dark:text-zinc-200">
-                        {audioUrl ? t.audioUploaded : t.uploadAudio}
-                      </p>
-                      <p className="portrait:text-xs landscape:text-sm text-zinc-500 dark:text-zinc-400">{t.uploadAudioDesc}</p>
-                    </div>
-                  </div>
-                  {audioUrl && (
-                    <audio
-                      ref={audioRef}
-                      src={audioUrl}
-                      className="hidden"
-                      onError={markAudioBroken}
-                      onCanPlay={() => { audioBrokenRef.current = false; setAudioError(''); }}
+                    <Search className="w-4 h-4" />
+                    <span className="portrait:hidden">{t.searchingOnline}</span>
+                  </button>
+                }
+              />
+              <ImportRow
+                icon={<Music className="w-4 h-4" />}
+                label={t.importAudio}
+                status={audioUrl ? (audioFileRef.current?.name || t.audioUploaded) : t.notImportedOptional}
+                hasFile={!!audioUrl}
+                accept="audio/*,.mp3,.wav,.ogg,.flac,.aac,.m4a,.mp4,.webm,.mov"
+                onFile={loadAudioFile}
+                onClear={handleClearAudio}
+                chooseLabel={t.chooseFile}
+                replaceLabel={t.replaceFile}
+                clearTitle="Clear Audio"
+              />
+              <ImportRow
+                icon={bgImageUrl
+                  ? <img src={bgImageUrl} alt="" className="w-full h-full object-cover" />
+                  : backgroundColor
+                    ? <div className="w-full h-full" style={{ backgroundColor }} />
+                    : <Layers className="w-4 h-4" />}
+                label={t.importBackground}
+                status={bgImageUrl ? (bgFileName || t.bgUploaded) : backgroundColor ? `${t.solidBg} ${backgroundColor}` : t.notImportedOptional}
+                hasFile={!!(bgImageUrl || backgroundColor)}
+                accept="image/*"
+                onFile={loadBackgroundFile}
+                onClear={handleClearBgImage}
+                chooseLabel={t.chooseFile}
+                replaceLabel={t.replaceFile}
+                clearTitle="Clear Background"
+                actions={
+                  <label
+                    title={t.solidBg}
+                    className="relative flex items-center justify-center w-8 h-8 rounded-lg text-base hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
+                  >
+                    🎨
+                    <input
+                      type="color"
+                      value={backgroundColor || '#ffffff'}
+                      onChange={handleBackgroundColorChange}
+                      className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
                     />
-                  )}
-                  {audioUrl && (
-                    <button
-                      onClick={handleClearAudio}
-                      className="absolute top-4 right-4 p-2 bg-black/50 hover:bg-red-500/80 text-white rounded-full backdrop-blur-sm transition-colors z-20"
-                      title="Clear Audio"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  )}
-                </>
-              )}
-            </DragDropWrapper>
+                  </label>
+                }
+              />
+            </div>
+
+            {/* 音频元素独立挂载，不跟导入行的布局走 */}
+            {audioUrl && (
+              <audio
+                ref={audioRef}
+                src={audioUrl}
+                className="hidden"
+                onError={markAudioBroken}
+                onCanPlay={() => { audioBrokenRef.current = false; setAudioError(''); }}
+              />
+            )}
 
             {audioError && (
               <div className="flex items-start space-x-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400">
@@ -3068,111 +2816,178 @@ export default function App() {
               </div>
             )}
 
-            {/* Background Upload */}
-            <DragDropWrapper
-              onDropFile={loadBackgroundFile}
-              accept="image/*"
-              className={(isDragging) => `
-                relative group cursor-pointer flex flex-col items-center justify-center 
-                w-full portrait:h-24 landscape:h-48 portrait:rounded-2xl landscape:rounded-3xl border-2 border-dashed transition-transform duration-300 ease-out overflow-hidden
-                ${isDragging 
-                  ? 'border-emerald-500 bg-emerald-500/10 scale-[1.02]' 
-                  : 'border-zinc-200 dark:border-zinc-700 bg-white/50 dark:bg-zinc-800/50 hover:border-zinc-300 dark:hover:border-zinc-600 hover:bg-white dark:hover:bg-zinc-800'}
-              `}
-            >
-              {(isDragging) => (
-                <>
-                  <label className="absolute inset-0 w-full h-full cursor-pointer z-0">
-                    <input type="file" accept="image/*" onChange={handleBgImageUpload} className="hidden" />
-                  </label>
-                  {bgImageUrl ? (
-                    <img src={bgImageUrl} alt="Background" className="absolute inset-0 w-full h-full object-cover opacity-50 pointer-events-none" />
-                  ) : backgroundColor ? (
-                    <div className="absolute inset-0 w-full h-full opacity-50 pointer-events-none" style={{ backgroundColor }} />
-                  ) : null}
-                  <div className="flex portrait:flex-row landscape:flex-col items-center portrait:space-x-4 landscape:space-y-4 z-10 pointer-events-none landscape:w-full landscape:px-4">
-                    <div className={`p-2 landscape:p-4 rounded-full ${isDragging ? 'bg-emerald-500/20 text-emerald-600 dark:bg-emerald-500/30 dark:text-emerald-400' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 group-hover:text-zinc-700 dark:group-hover:text-zinc-300'}`}>
-                      <Layers className="w-6 h-6 landscape:w-8 landscape:h-8" />
-                    </div>
-                    <div className="portrait:text-left landscape:text-center portrait:space-y-0 landscape:space-y-1">
-                      <p className="portrait:text-sm landscape:text-lg font-medium text-zinc-800 dark:text-zinc-200 landscape:px-4 line-clamp-1 truncate w-full">
-                        {bgImageUrl ? t.bgUploaded : backgroundColor ? t.solidBg : t.uploadBg}
-                      </p>
-                      <p className="portrait:text-xs landscape:text-sm text-zinc-500 dark:text-zinc-400">{t.uploadBgDesc}</p>
-                    </div>
-                  </div>
-                  {(bgImageUrl || backgroundColor) && (
-                    <button
-                      onClick={handleClearBgImage}
-                      className="absolute top-4 right-4 p-2 bg-black/50 hover:bg-red-500/80 text-white rounded-full backdrop-blur-sm transition-colors z-20"
-                      title="Clear Background"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  )}
-                  
-                  {/* Color Picker Button */}
-                  <div 
-                    className="absolute bottom-4 right-4 z-20"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <label className="flex items-center justify-center w-10 h-10 bg-white/80 dark:bg-zinc-800/80 hover:bg-white dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-full shadow-sm backdrop-blur-sm cursor-pointer border border-zinc-200 dark:border-zinc-700" title="Solid Color Background">
-                      <span className="text-lg">🎨</span>
-                      <input 
-                        type="color" 
-                        value={backgroundColor || '#ffffff'} 
-                        onChange={handleBackgroundColorChange}
-                        className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
-                      />
-                    </label>
-                  </div>
-                </>
-              )}
-            </DragDropWrapper>
-          </div>
-
-          {error && (
-            <div className="flex items-start space-x-2 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600">
-              <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-              <p className="text-sm font-medium whitespace-pre-wrap">{error}</p>
-            </div>
-          )}
-        </section>
-
-          </div>
-        </div>
-
-        {/* Resizable Divider */}
-        <div
-          className="group flex flex-none shrink-0 items-center justify-center relative touch-none z-10
-                     portrait:w-full portrait:h-1 portrait:cursor-row-resize 
-                     landscape:w-1 landscape:h-full landscape:cursor-col-resize 
-                     bg-zinc-200 dark:bg-zinc-700
-                     hover:bg-indigo-400 dark:hover:bg-indigo-500 active:bg-indigo-500 dark:active:bg-indigo-600"
-          onMouseDown={() => setIsDraggingDivider(true)}
-          onTouchStart={() => setIsDraggingDivider(true)}
-        >
-          {/* Extended invisible wrapper for easier grabbing (the hotspot) */}
-          <div className="absolute portrait:w-full portrait:-top-2 portrait:-bottom-2 landscape:h-full landscape:-left-2 landscape:-right-2 z-0" />
-          
-          {/* Handle icon */}
-          <div className="absolute bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-full flex items-center justify-center shadow-sm text-zinc-400 dark:text-zinc-500 group-hover:text-white dark:group-hover:text-white group-hover:bg-indigo-400 dark:group-hover:bg-indigo-500 group-hover:border-transparent portrait:w-8 portrait:h-3 landscape:w-3 landscape:h-8 z-10 pointer-events-none">
-            <span className="portrait:rotate-90 text-[10px] leading-none mb-0.5">⋮</span>
-          </div>
-        </div>
-
-        {/* Right Monitor */}
-        <div className="flex-1 min-w-0 min-h-0 bg-white/30 dark:bg-zinc-950/30 portrait:border-t landscape:border-l border-zinc-200 dark:border-zinc-800 overflow-y-auto custom-scrollbar relative">
-          <div className="sticky top-0 portrait:p-4 landscape:p-8 portrait:space-y-4 landscape:space-y-8 min-h-max">
-          {/* Step 3: Monitor */}
-          {parsedData ? (
-            <section className="portrait:space-y-4 landscape:space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
-              <div className="flex items-center portrait:space-x-2 landscape:space-x-3 border-b border-zinc-200 dark:border-zinc-800 portrait:pb-2 landscape:pb-4">
-                <div className="portrait:w-6 portrait:h-6 landscape:w-8 landscape:h-8 rounded-full bg-amber-500/20 text-amber-600 dark:bg-amber-500/30 dark:text-amber-400 flex items-center justify-center font-bold portrait:text-sm landscape:text-base">3</div>
-                <h2 className="portrait:text-lg landscape:text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{t.step3}</h2>
+            {error && (
+              <div className="flex items-start space-x-2 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600">
+                <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                <p className="text-sm font-medium whitespace-pre-wrap">{error}</p>
               </div>
-            
-              <div className="flex flex-col items-center portrait:space-y-4 landscape:space-y-8">
+            )}
+          </CollapsibleSection>
+
+          {/* ② 嘴型设置 */}
+          <CollapsibleSection
+            badge={stepBadge(<Smile className="w-3.5 h-3.5" />, 'bg-indigo-500/20 text-indigo-600 dark:bg-indigo-500/30 dark:text-indigo-400')}
+            title={t.step2}
+            storageKey="mouthSectionCollapsed"
+            toggleTitle={sectionToggleTitle}
+            extra={
+              <div className="flex items-center gap-2">
+                <input
+                  type="file"
+                  ref={presetInputRef}
+                  accept=".zip,application/zip"
+                  className="hidden"
+                  onChange={(e) => handleImportPreset(e.target.files?.[0])}
+                />
+                <button
+                  onClick={handleExportPreset}
+                  disabled={isPresetBusy}
+                  title={t.exportPreset}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-800/60 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span className="portrait:hidden">{t.exportPreset}</span>
+                </button>
+                <button
+                  onClick={() => presetInputRef.current?.click()}
+                  disabled={isPresetBusy}
+                  title={t.importPreset}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-zinc-300 dark:border-zinc-700 bg-white/60 dark:bg-zinc-800/60 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <UploadCloud className="w-3.5 h-3.5" />
+                  <span className="portrait:hidden">{t.importPreset}</span>
+                </button>
+              </div>
+            }
+          >
+            <div className="grid grid-cols-3 landscape:grid-cols-6 portrait:gap-2 landscape:gap-4">
+              {mouthShapeConfigs.map((config) => (
+                <DragDropWrapper
+                  key={config.id}
+                  onDropFile={(file) => handleMouthImageUpload(config.id, file)}
+                  accept="image/*"
+                  className={(isDragging) => `
+                    relative flex flex-col items-center justify-center aspect-square rounded-2xl border-2 border-dashed cursor-pointer overflow-hidden transition-all
+                    ${config.bg}
+                    ${isDragging ? 'border-emerald-500 bg-emerald-500/10 scale-[1.02]' : ''}
+                  `}
+                >
+                  {(isDragging) => (
+                    <>
+                      <label className="absolute inset-0 w-full h-full cursor-pointer z-0">
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          onChange={(e) => e.target.files?.[0] && handleMouthImageUpload(config.id, e.target.files[0])}
+                        />
+                      </label>
+                      {mouthImages[config.id] ? (
+                        <>
+                          <img src={mouthImages[config.id]} alt={config.label} className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
+                          <button
+                            onClick={(e) => handleClearMouthImage(config.id, e)}
+                            className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-red-500/80 text-white rounded-full backdrop-blur-sm transition-colors z-20"
+                            title="Clear image"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </>
+                      ) : (
+                        <div className="flex flex-col items-center space-y-2 z-10 pointer-events-none">
+                          <UploadCloud className={`w-8 h-8 ${config.color} opacity-70`} />
+                          <span className={`font-medium ${config.color}`}>{config.label}</span>
+                        </div>
+                      )}
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm p-2 text-center text-xs font-medium text-white/90 translate-y-full hover:translate-y-0 transition-transform z-10 pointer-events-none">
+                        {t.clickToChange}
+                      </div>
+                    </>
+                  )}
+                </DragDropWrapper>
+              ))}
+            </div>
+          </CollapsibleSection>
+
+          {/* 单字覆盖 */}
+          {uniqueLyrics.length > 0 && (
+            <CollapsibleSection
+              badge={stepBadge(<Settings className="w-3.5 h-3.5" />, 'bg-purple-500/20 text-purple-600 dark:bg-purple-500/30 dark:text-purple-400')}
+              title={t.specialLyrics}
+              storageKey="overrideSectionCollapsed"
+              toggleTitle={sectionToggleTitle}
+              extra={<span className="text-xs landscape:text-sm text-zinc-600 dark:text-zinc-400">{t.detectedSounds.replace('{count}', uniqueLyrics.length.toString())}</span>}
+            >
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(50px,1fr))] landscape:grid-cols-[repeat(auto-fill,minmax(80px,1fr))] portrait:gap-2 landscape:gap-3">
+                {uniqueLyrics.map((lyric) => {
+                  const baseShape = getMouthShape(lyric);
+                  const hasOverride = !!overrideImages[lyric];
+                  const displayImg = hasOverride ? overrideImages[lyric] : mouthImages[baseShape];
+
+                  return (
+                    <DragDropWrapper
+                      key={lyric}
+                      onDropFile={(file) => handleOverrideImageUpload(lyric, file)}
+                      accept="image/*"
+                      className={(isDragging) => `
+                        relative flex flex-col items-center justify-center aspect-square rounded-xl border cursor-pointer overflow-hidden transition-all
+                        ${hasOverride ? 'bg-purple-500/10 border-purple-500/50 hover:border-purple-400' : 'bg-zinc-100/50 dark:bg-zinc-800/50 border-zinc-300/50 dark:border-zinc-700/50 hover:border-zinc-500 dark:hover:border-zinc-400'}
+                        ${isDragging ? 'border-emerald-500 bg-emerald-500/10 scale-[1.02]' : ''}
+                      `}
+                    >
+                      {(isDragging) => (
+                        <>
+                          <label className="absolute inset-0 w-full h-full cursor-pointer z-0">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => e.target.files?.[0] && handleOverrideImageUpload(lyric, e.target.files[0])}
+                            />
+                          </label>
+
+                          {displayImg ? (
+                            <img src={displayImg} alt={lyric} className={`absolute inset-0 w-full h-full object-contain pointer-events-none ${!hasOverride ? 'opacity-50 grayscale' : ''}`} />
+                          ) : (
+                            <span className="text-2xl font-bold text-zinc-700 dark:text-zinc-300 pointer-events-none">{lyric}</span>
+                          )}
+
+                          {hasOverride && (
+                            <button
+                              onClick={(e) => handleClearOverrideImage(lyric, e)}
+                              className="absolute top-1 right-1 p-1 bg-black/50 hover:bg-red-500/80 text-white rounded-full backdrop-blur-sm transition-colors z-20"
+                              title="Clear override"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+
+                          <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-black/60 backdrop-blur text-[10px] font-bold text-white rounded pointer-events-none">
+                            {lyric}
+                          </div>
+
+                          {!hasOverride && (
+                            <div className="absolute top-1 right-1 px-1.5 py-0.5 bg-zinc-100/80 dark:bg-zinc-800/80 backdrop-blur text-[8px] font-mono text-zinc-600 dark:text-zinc-400 rounded pointer-events-none">
+                              {baseShape}
+                            </div>
+                          )}
+
+                          <div className="absolute inset-0 bg-black/60 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center z-10 pointer-events-none">
+                            <span className="text-xs font-medium text-white">{hasOverride ? t.change : t.override}</span>
+                          </div>
+                        </>
+                      )}
+                    </DragDropWrapper>
+                  );
+                })}
+              </div>
+            </CollapsibleSection>
+          )}
+
+          {/* ③ 预览与导出 */}
+          <CollapsibleSection badge={stepBadge(<MonitorPlay className="w-3.5 h-3.5" />, 'bg-amber-500/20 text-amber-600 dark:bg-amber-500/30 dark:text-amber-400')} title={t.step3}>
+            {parsedData ? (
+              <div className="flex flex-col items-center portrait:gap-4 landscape:gap-6">
                 {/* Canvas Container */}
                 <div className="relative w-full max-w-2xl aspect-video portrait:rounded-xl landscape:rounded-3xl portrait:border-2 landscape:border-4 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 portrait:shadow-xl landscape:shadow-2xl overflow-hidden flex items-center justify-center bg-checkered">
                 <div 
@@ -3189,14 +3004,14 @@ export default function App() {
                     height={canvasSize.height} 
                     className="w-full h-full object-contain pointer-events-none"
                   />
-                  
+
                   {isFullscreen && (
                     <div className={`absolute bottom-12 left-1/2 -translate-x-1/2 px-6 py-3 bg-black/60 text-white text-sm rounded-full backdrop-blur-md transition-opacity duration-500 pointer-events-none ${showFullscreenHint ? 'opacity-100' : 'opacity-0'}`}>
                       {t.fullscreenHint}
                     </div>
                   )}
                 </div>
-                
+
                 {!isFullscreen && (
                   // 隐藏态保留 opacity-0 而非卸载节点，使原区域仍可悬停浮现并点击恢复
                   <button
@@ -3210,179 +3025,173 @@ export default function App() {
                 )}
               </div>
 
-              {/* Controls */}
-              <div className="flex flex-col items-center space-y-6 w-full max-w-2xl">
-                
-                {/* Settings Row */}
-                <div className="flex flex-wrap items-center justify-between w-full gap-4 bg-white/50 dark:bg-zinc-900/50 p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800">
-                  <div className="flex items-center space-x-4">
-                    <div className="flex flex-col space-y-1">
-                      <label className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">{t.width}</label>
-                      <input 
-                        type="number" 
+                <div className="w-full space-y-4">
+                  {/* 画布设置：收成一行 */}
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-zinc-500 dark:text-zinc-400">
+                    <label className="flex items-center gap-1.5">
+                      {t.width}
+                      <input
+                        type="number"
                         placeholder="Auto"
                         value={customWidth}
                         onChange={(e) => setCustomWidth(e.target.value)}
-                        className="w-20 bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg px-2 py-1 text-sm text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:focus:ring-indigo-400"
+                        className={`w-20 ${compactInput}`}
                       />
-                    </div>
-                    <div className="flex flex-col space-y-1">
-                      <label className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">{t.height}</label>
-                      <input 
-                        type="number" 
+                    </label>
+                    <label className="flex items-center gap-1.5">
+                      {t.height}
+                      <input
+                        type="number"
                         placeholder="Auto"
                         value={customHeight}
                         onChange={(e) => setCustomHeight(e.target.value)}
-                        className="w-20 bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg px-2 py-1 text-sm text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:focus:ring-indigo-400"
+                        className={`w-20 ${compactInput}`}
+                      />
+                    </label>
+                    <label className="flex items-center gap-1.5">
+                      {t.audioOffset}
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={audioOffset}
+                        onChange={(e) => setAudioOffset(e.target.value)}
+                        className={`w-24 ${compactInput}`}
+                      />
+                    </label>
+                  </div>
+
+                  {/* Scrubber */}
+                  <div className="w-full space-y-2">
+                    <div className="flex justify-between text-sm font-mono text-zinc-600 dark:text-zinc-400">
+                      <span>{formatTime(currentTime)}</span>
+                      <span>{formatTime(getTimelineEndMs(parsedData))}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={togglePlay}
+                        className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-900 dark:text-zinc-100 transition-all active:scale-95 shadow-sm"
+                      >
+                        {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
+                      </button>
+                      <input
+                        type="range"
+                        min="0"
+                        max={getTimelineEndMs(parsedData)}
+                        step="1"
+                        value={currentTime}
+                        onChange={handleSeek}
+                        className="flex-1 h-2 bg-zinc-100 dark:bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500 dark:accent-indigo-400"
                       />
                     </div>
                   </div>
-                  
-                  <div className="flex flex-col space-y-1">
-                    <label className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">{t.audioOffset}</label>
-                    <input 
-                      type="number" 
-                      step="0.01"
-                      value={audioOffset}
-                      onChange={(e) => setAudioOffset(e.target.value)}
-                      className="w-24 bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg px-2 py-1 text-sm text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:focus:ring-indigo-400"
-                    />
-                  </div>
-                </div>
 
-                {/* Scrubber */}
-                <div className="w-full space-y-2">
-                  <div className="flex justify-between text-sm font-mono text-zinc-600 dark:text-zinc-400">
-                    <span>{formatTime(currentTime)}</span>
-                    <span>{formatTime(getTimelineEndMs(parsedData))}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={togglePlay}
-                      className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-900 dark:text-zinc-100 transition-all active:scale-95 shadow-sm"
-                    >
-                      {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
-                    </button>
-                    <input
-                      type="range"
-                      min="0"
-                      max={getTimelineEndMs(parsedData)}
-                      step="1"
-                      value={currentTime}
-                      onChange={handleSeek}
-                      className="flex-1 h-2 bg-zinc-100 dark:bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500 dark:accent-indigo-400"
-                    />
-                  </div>
-                </div>
+                  {/* 音符时间轴编辑器 */}
+                  <NoteTimeline
+                    key={notesLoadId}
+                    data={parsedData}
+                    onChange={applyParsedData}
+                    currentTime={currentTime}
+                    audioOffsetMs={(parseFloat(audioOffset) || 0) * 1000}
+                    isPlaying={isPlaying}
+                    disabled={isExporting}
+                    onSeek={seekTo}
+                    onTogglePlay={togglePlay}
+                    language={language}
+                  />
 
-                {/* 音符时间轴编辑器 */}
-                <NoteTimeline
-                  key={notesLoadId}
-                  data={parsedData}
-                  onChange={applyParsedData}
-                  currentTime={currentTime}
-                  audioOffsetMs={(parseFloat(audioOffset) || 0) * 1000}
-                  isPlaying={isPlaying}
-                  disabled={isExporting}
-                  onSeek={seekTo}
-                  onTogglePlay={togglePlay}
-                  language={language}
-                />
-
-                <div className="flex items-center justify-end w-full">
-                  <div className="flex portrait:flex-wrap landscape:flex-nowrap items-center justify-center portrait:gap-2 landscape:space-x-2 w-full portrait:w-auto">
-                    <button
-                      onClick={handleFullscreenPreview}
-                      disabled={isExporting}
-                      className={`flex items-center justify-center portrait:w-12 landscape:w-14 portrait:h-12 landscape:h-14 rounded-xl font-medium portrait:shadow-sm landscape:shadow-lg transition-all active:scale-95 border
-                        ${isExporting
-                          ? 'bg-zinc-100/50 dark:bg-zinc-800/50 text-zinc-400 dark:text-zinc-500 border-zinc-200 dark:border-zinc-800 cursor-not-allowed'
-                          : 'bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 border-zinc-300 dark:border-zinc-700'}`}
-                      title={t.fullscreenMode}
-                    >
-                      <span className="portrait:text-xl landscape:text-2xl leading-none -mt-1">⛶</span>
-                    </button>
-
-                    <button
-                      onClick={handlePopOut}
-                      disabled={isExporting || isPoppedOut}
-                      className={`flex items-center justify-center portrait:w-12 landscape:w-14 portrait:h-12 landscape:h-14 rounded-xl font-medium portrait:shadow-sm landscape:shadow-lg transition-all active:scale-95 border
-                        ${isExporting || isPoppedOut
-                          ? 'bg-zinc-100/50 dark:bg-zinc-800/50 text-zinc-400 dark:text-zinc-500 border-zinc-200 dark:border-zinc-800 cursor-not-allowed'
-                          : 'bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 border-zinc-300 dark:border-zinc-700'}`}
-                      title={t.popOut}
-                    >
-                      <span className="portrait:text-xl landscape:text-2xl leading-none">⧉</span>
-                    </button>
-
-                    <select 
-                      value={exportFormat} 
-                      onChange={(e) => setExportFormat(e.target.value as any)}
-                      className="portrait:flex-1 landscape:flex-none portrait:h-12 landscape:h-14 portrait:px-2 landscape:px-4 rounded-xl bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 portrait:text-xs landscape:text-base focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400"
-                      disabled={isExporting}
-                    >
-                      <option value="webm">{t.webmDesc}</option>
-                      <option value="mp4">{t.mp4Desc}</option>
-                      <option value="mov">{t.movDesc}</option>
-                      <option value="mkv">{t.mkvDesc}</option>
-                      <option value="gif">{t.gifDesc}</option>
-                    </select>
-
-                    <button
-                      onClick={handleExport}
-                      disabled={isExporting}
-                      className={`flex portrait:flex-1 landscape:flex-none items-center justify-center portrait:px-4 landscape:px-6 portrait:h-12 landscape:h-14 rounded-xl font-medium portrait:shadow-sm landscape:shadow-lg transition-all active:scale-95 portrait:space-x-1 landscape:space-x-2 portrait:text-sm landscape:text-base
-                        ${isExporting
-                          ? 'bg-indigo-600/50 text-white/50 cursor-not-allowed'
-                          : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/20'}`}
-                    >
-                      {isExporting ? <Download className="portrait:w-4 portrait:h-4 landscape:w-5 landscape:h-5 animate-bounce" /> : <Video className="portrait:w-4 portrait:h-4 landscape:w-5 landscape:h-5" />}
-                      <span className="truncate">
-                        {isExporting ? `${exportStatus} ${exportProgress}%` : t.exportVideo}
-                      </span>
-                    </button>
-
-                    {isExporting && (
+                  <div className="flex items-center justify-end w-full">
+                    <div className="flex portrait:flex-wrap landscape:flex-nowrap items-center justify-center portrait:gap-2 landscape:space-x-2 w-full portrait:w-auto">
                       <button
-                        onClick={cancelExport}
-                        title={t.cancelExport}
-                        className="flex-shrink-0 flex items-center justify-center portrait:w-12 landscape:w-14 portrait:h-12 landscape:h-14 rounded-xl font-medium portrait:shadow-sm landscape:shadow-lg transition-all active:scale-95 border bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 border-red-500/30"
+                        onClick={handleFullscreenPreview}
+                        disabled={isExporting}
+                        className={`flex items-center justify-center portrait:w-12 landscape:w-14 portrait:h-12 landscape:h-14 rounded-xl font-medium portrait:shadow-sm landscape:shadow-lg transition-all active:scale-95 border
+                          ${isExporting
+                            ? 'bg-zinc-100/50 dark:bg-zinc-800/50 text-zinc-400 dark:text-zinc-500 border-zinc-200 dark:border-zinc-800 cursor-not-allowed'
+                            : 'bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 border-zinc-300 dark:border-zinc-700'}`}
+                        title={t.fullscreenMode}
                       >
-                        <X className="portrait:w-5 portrait:h-5 landscape:w-6 landscape:h-6" />
+                        <span className="portrait:text-xl landscape:text-2xl leading-none -mt-1">⛶</span>
                       </button>
-                    )}
-                  </div>
-                </div>
-                
-                {exportFormat === 'webm' && (
-                  <div className="text-xs text-amber-600/80 dark:text-amber-500/90 text-center mt-2 bg-amber-50 dark:bg-amber-900/40 p-2 rounded-lg">
-                    {t.webmWarning}
-                  </div>
-                )}
 
-                {exportFormat === 'webm' && bgGifFrames && (
-                  <div className="text-xs text-red-600/80 dark:text-red-400/90 text-center mt-2 bg-red-50 dark:bg-red-900/40 p-2 rounded-lg">
-                    {t.webmGifWarning}
+                      <button
+                        onClick={handlePopOut}
+                        disabled={isExporting || isPoppedOut}
+                        className={`flex items-center justify-center portrait:w-12 landscape:w-14 portrait:h-12 landscape:h-14 rounded-xl font-medium portrait:shadow-sm landscape:shadow-lg transition-all active:scale-95 border
+                          ${isExporting || isPoppedOut
+                            ? 'bg-zinc-100/50 dark:bg-zinc-800/50 text-zinc-400 dark:text-zinc-500 border-zinc-200 dark:border-zinc-800 cursor-not-allowed'
+                            : 'bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 border-zinc-300 dark:border-zinc-700'}`}
+                        title={t.popOut}
+                      >
+                        <span className="portrait:text-xl landscape:text-2xl leading-none">⧉</span>
+                      </button>
+
+                      <select 
+                        value={exportFormat} 
+                        onChange={(e) => setExportFormat(e.target.value as any)}
+                        className="portrait:flex-1 landscape:flex-none portrait:h-12 landscape:h-14 portrait:px-2 landscape:px-4 rounded-xl bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 portrait:text-xs landscape:text-base focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400"
+                        disabled={isExporting}
+                      >
+                        <option value="webm">{t.webmDesc}</option>
+                        <option value="mp4">{t.mp4Desc}</option>
+                        <option value="mov">{t.movDesc}</option>
+                        <option value="mkv">{t.mkvDesc}</option>
+                        <option value="gif">{t.gifDesc}</option>
+                      </select>
+
+                      <button
+                        onClick={handleExport}
+                        disabled={isExporting}
+                        className={`flex portrait:flex-1 landscape:flex-none items-center justify-center portrait:px-4 landscape:px-6 portrait:h-12 landscape:h-14 rounded-xl font-medium portrait:shadow-sm landscape:shadow-lg transition-all active:scale-95 portrait:space-x-1 landscape:space-x-2 portrait:text-sm landscape:text-base
+                          ${isExporting
+                            ? 'bg-indigo-600/50 text-white/50 cursor-not-allowed'
+                            : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/20'}`}
+                      >
+                        {isExporting ? <Download className="portrait:w-4 portrait:h-4 landscape:w-5 landscape:h-5 animate-bounce" /> : <Video className="portrait:w-4 portrait:h-4 landscape:w-5 landscape:h-5" />}
+                        <span className="truncate">
+                          {isExporting ? `${exportStatus} ${exportProgress}%` : t.exportVideo}
+                        </span>
+                      </button>
+
+                      {isExporting && (
+                        <button
+                          onClick={cancelExport}
+                          title={t.cancelExport}
+                          className="flex-shrink-0 flex items-center justify-center portrait:w-12 landscape:w-14 portrait:h-12 landscape:h-14 rounded-xl font-medium portrait:shadow-sm landscape:shadow-lg transition-all active:scale-95 border bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 border-red-500/30"
+                        >
+                          <X className="portrait:w-5 portrait:h-5 landscape:w-6 landscape:h-6" />
+                        </button>
+                      )}
+                    </div>
                   </div>
-                )}
-                
-                {ffmpegError && (
-                  <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/40 border border-red-200 dark:border-red-900/50 p-3 rounded-lg text-left whitespace-pre-wrap break-words w-full mt-2">
-                    <span className="font-mono text-xs">{ffmpegError}</span>
-                  </div>
-                )}
+
+                  {exportFormat === 'webm' && (
+                    <div className="text-xs text-amber-600/80 dark:text-amber-500/90 text-center mt-2 bg-amber-50 dark:bg-amber-900/40 p-2 rounded-lg">
+                      {t.webmWarning}
+                    </div>
+                  )}
+
+                  {exportFormat === 'webm' && bgGifFrames && (
+                    <div className="text-xs text-red-600/80 dark:text-red-400/90 text-center mt-2 bg-red-50 dark:bg-red-900/40 p-2 rounded-lg">
+                      {t.webmGifWarning}
+                    </div>
+                  )}
+
+                  {ffmpegError && (
+                    <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/40 border border-red-200 dark:border-red-900/50 p-3 rounded-lg text-left whitespace-pre-wrap break-words w-full mt-2">
+                      <span className="font-mono text-xs">{ffmpegError}</span>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          </section>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full min-h-[50vh] text-zinc-500 dark:text-zinc-600 space-y-4">
-              <Video className="w-16 h-16 opacity-20" />
-              <p>{t.noUstLoaded}</p>
-            </div>
-          )}
+            ) : (
+              <div className="flex items-center justify-center gap-3 h-24 rounded-2xl border-2 border-dashed border-zinc-200 dark:border-zinc-800 text-sm text-zinc-500">
+                <Video className="w-6 h-6 opacity-40" />
+                <p>{t.noUstLoaded}</p>
+              </div>
+            )}
+          </CollapsibleSection>
         </div>
-      </div>
-    </div>
+      </main>
 
       {/* UST Search Modal */}
       <UstSearchModal

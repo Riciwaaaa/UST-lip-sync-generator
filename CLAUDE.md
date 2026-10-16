@@ -13,7 +13,9 @@ npm run preview  # Preview production build
 
 ## Architecture
 
-This is a **single-page React app** — almost all logic lives in `src/App.tsx` (~3500 lines). Helper components live in `src/components/` (`DragDropWrapper`, `UstSearchModal`, `NoteTimeline`); the note data model and its pure helpers live in `src/lib/notes.ts`.
+This is a **single-page React app** — almost all logic lives in `src/App.tsx` (~3400 lines). Helper components live in `src/components/` (`DragDropWrapper`, `UstSearchModal`, `NoteTimeline`, `CollapsibleSection`, `ImportRow`); the note data model and its pure helpers live in `src/lib/notes.ts`.
+
+The page is a **single centred column** (`max-w-4xl`, one scroll container `<main>`), top to bottom: import rows (project / audio / background, each an `ImportRow` sharing columns via CSS subgrid — the parent must use `IMPORT_ROWS_GRID`; online UST search lives in the project row) → mouth shapes → lyric overrides → preview & export. Sections use `CollapsibleSection` (icon badges, no step numbers); mouth shapes and overrides are collapsible, with the state kept in localStorage (`mouthSectionCollapsed`, `overrideSectionCollapsed`). The note timeline's own collapse is deliberately not persisted — it always opens expanded. Layout switches on the `portrait:` / `landscape:` variants (viewport orientation, not width): portrait hides the header bar and shows a small in-page title plus a fixed button row.
 
 ### Data flow
 
@@ -49,3 +51,9 @@ This is a **single-page React app** — almost all logic lives in `src/App.tsx` 
 ### i18n
 
 Translations for `zh`, `en`, `ja` are a single `i18n` object at the top of `App.tsx`. The active locale is `language` state, accessed via `const t = i18n[language]`. Components under `src/components/` keep their own `i18nTexts` dictionary and receive `language` as a prop.
+
+### Versioning & changelog
+
+- `src/changelog.ts` is the single source for the in-app changelog (notice modal) and the displayed version (`APP_VERSION` = newest entry that has a `version`). Entries are newest-first, each with `date` (YYYY-MM-DD) and per-language `items`; entries before 1.0.0 have no version.
+- Versions follow semver starting at **1.0.0** (2026-10-16): bug fixes → PATCH (1.0.1), new features → MINOR (1.1.0), breaking changes such as an incompatible preset format → MAJOR (2.0.0).
+- To release: add the entry at the top of `CHANGELOG` and bump `package.json` with `npm version <x.y.z> --no-git-tag-version` so both agree. The changelog text is the author's own wording — don't rewrite it.

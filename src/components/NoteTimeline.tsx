@@ -91,7 +91,6 @@ const DEFAULT_PX_PER_MS = 0.15;
 const MIN_NOTE_MS = 20;
 const HISTORY_LIMIT = 100;
 const DOUBLE_TAP_MS = 350;
-const COLLAPSED_KEY = 'noteTimelineCollapsed';
 
 interface DragState {
   pointerId: number;
@@ -110,10 +109,8 @@ export const NoteTimeline: React.FC<NoteTimelineProps> = ({
 
   const [pxPerMs, setPxPerMs] = useState(DEFAULT_PX_PER_MS);
   const [snapDiv, setSnapDiv] = useState(16);
-  // 折叠状态记在本机，换工程时组件会重新挂载，靠 localStorage 保持
-  const [collapsed, setCollapsed] = useState(() => {
-    try { return localStorage.getItem(COLLAPSED_KEY) === '1'; } catch { return false; }
-  });
+  // 默认展开且不记忆：换工程时组件重新挂载，总是以展开状态出现
+  const [collapsed, setCollapsed] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [scrollLeft, setScrollLeft] = useState(0);
@@ -264,11 +261,7 @@ export const NoteTimeline: React.FC<NoteTimelineProps> = ({
     if (outOfView) el.scrollLeft = Math.max(0, x - w * 0.1);
   }, [visualMs, isPlaying, collapsed]);
 
-  const toggleCollapsed = () => {
-    const next = !collapsed;
-    setCollapsed(next);
-    try { localStorage.setItem(COLLAPSED_KEY, next ? '1' : '0'); } catch {}
-  };
+  const toggleCollapsed = () => setCollapsed(c => !c);
 
   const ensureVisible = (startMs: number, endMs: number) => {
     const el = scrollRef.current;
@@ -471,6 +464,8 @@ export const NoteTimeline: React.FC<NoteTimelineProps> = ({
   const handleRulerPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (disabled || e.button !== 0) return;
     flushFocusedInput();
+    // 聚焦但不滚动页面，点完标尺可以直接用空格播放（mousedown 的默认聚焦在 onMouseDown 里拦掉）
+    scrollRef.current?.focus({ preventScroll: true });
     rulerPointerRef.current = e.pointerId;
     e.currentTarget.setPointerCapture(e.pointerId);
     seekFromClientX(e.clientX);
@@ -723,6 +718,7 @@ export const NoteTimeline: React.FC<NoteTimelineProps> = ({
             <div
               className="relative h-5 bg-zinc-200/70 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 cursor-pointer touch-none"
               onPointerDown={handleRulerPointerDown}
+              onMouseDown={(e) => e.preventDefault()}
               onPointerMove={handleRulerPointerMove}
               onPointerUp={handleRulerPointerUp}
               onPointerCancel={handleRulerPointerUp}

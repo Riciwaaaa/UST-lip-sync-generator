@@ -27,9 +27,17 @@ const browser = await chromium.launch({ channel: 'msedge', headless: true });
 - **上传文件不需要真实文件**：`setInputFiles({ name, mimeType, buffer })` 直接传 Buffer。
   UST 内容用纯文本构造（`[#SETTING]`/`Tempo=`/`[#0000]`/`Length=`/`Lyric=`）；
   动画 GIF 用 gifenc 在 Node 里生成两帧红蓝交替；PNG 可在页面里用 canvas.toDataURL 生成。
-- **定位**：UST 输入 `input[accept=".ust,.ustx,.vsqx"]`；背景图输入是
-  `input[type="file"][accept="image/*"]` 的 **last()**（前面若干个是嘴型格子）；
+- **定位**：UST 输入 `input[accept=".ust,.ustx,.vsqx"]`；音频输入 `input[type="file"][accept^="audio/"]`；
+  背景图输入是 `input[type="file"][accept="image/*"]` 的 **first()**（导入区在最前，后面才是嘴型/单字覆盖格子）；
+  纯色背景 `input[type="color"]`（`fill('#ff0000')`）；在线搜索入口 `button[title="在线搜索UST"]`；
+  导入行各格依次是 图标 | 标签 span（`工程`/`音频`/`背景`）| 按钮组 | 状态文字 | 清除，状态文字是标签之后隔一个的兄弟元素；
   延时补正输入 `input[type="number"][step="0.01"].w-24`；导出按钮按文本 `导出`。
+- **视口方向决定布局**：`portrait:`/`landscape:` 按宽高比切换，1440×2200 这种"高于宽"的视口会走竖屏布局。
+  截整页长图时别把视口拉高，改为注入样式放开滚动容器：
+  `body > div, #root, #root > div { height:auto!important; overflow:visible!important } main { overflow:visible!important }`
+  再 `screenshot({ fullPage: true })`。
+- **折叠状态存在 localStorage**（`mouthSectionCollapsed` / `overrideSectionCollapsed`），新 context 默认全部展开；
+  音符面板的折叠不记忆，每次载入都是展开的。
 - **首次进入有须知弹窗**，先点 `确认` 关闭。
 - **画布断言读像素**：`canvas.getContext('2d').getImageData(...)`。注意没传嘴型图时
   画布上叠了半透明占位色块和字母，背景色不会是纯色 —— 断言用"alpha=255 + 通道相对强弱/
